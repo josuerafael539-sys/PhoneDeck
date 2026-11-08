@@ -1,0 +1,1783 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PhoneDeck by ZynoList · Control de mi teléfono</title>
+<style>
+  :root {
+    --bg: #0a0f1c;
+    --bg2: #0e1526;
+    --panel: #111a2e;
+    --panel2: #16213a;
+    --line: #223052;
+    --text: #e8eefb;
+    --muted: #8ea3c7;
+    --accent: #38bdf8;
+    --accent2: #a78bfa;
+    --ok: #34d399;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(56,189,248,.12), transparent 60%),
+      radial-gradient(900px 500px at 0% 100%, rgba(167,139,250,.10), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, Cantarell, sans-serif;
+    min-height: 100vh;
+  }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .85em; word-break: break-all; }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .app { display: flex; min-height: 100vh; }
+
+  aside {
+    width: 232px; flex: 0 0 232px; padding: 22px 16px;
+    border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(17,26,46,.9), rgba(10,15,28,.9));
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; padding: 0 8px 18px; }
+  .brand-logo {
+    width: 38px; height: 38px; border-radius: 11px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: grid; place-items: center; color: #071018; font-weight: 800; font-size: 18px;
+    box-shadow: 0 6px 20px rgba(56,189,248,.28);
+  }
+  .brand-name { font-weight: 700; letter-spacing: .3px; }
+  .brand-sub { color: var(--muted); font-size: 12px; }
+  nav { display: flex; flex-direction: column; gap: 4px; }
+  .nav-btn {
+    text-align: left; border: 0; background: transparent; color: var(--muted);
+    padding: 10px 12px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; gap: 10px;
+    border-left: 2px solid transparent; transition: .15s ease;
+  }
+  .nav-btn:hover { background: rgba(56,189,248,.07); color: var(--text); }
+  .nav-btn.active { background: rgba(56,189,248,.12); color: var(--text); border-left-color: var(--accent); }
+  .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .55; }
+
+  main { flex: 1; min-width: 0; padding: 22px 26px 60px; }
+  header.top {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    flex-wrap: wrap; margin-bottom: 20px;
+  }
+  .title-block h1 { font-size: 22px; margin: 0 0 2px; font-weight: 700; }
+  .title-block p { margin: 0; color: var(--muted); font-size: 13px; }
+  .device-picker { display: flex; align-items: center; gap: 10px; }
+  select, input[type=text], input[type=search], input:not([type]) {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 10px; padding: 9px 12px; outline: none;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+  .pillbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+    padding: 6px 12px; font-size: 12.5px; color: var(--muted); white-space: nowrap;
+  }
+  .pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px currentColor; }
+  .pill.ok .dot { background: var(--ok); color: var(--ok); }
+  .pill.warn .dot { background: var(--warn); color: var(--warn); }
+  .pill.bad .dot { background: var(--bad); color: var(--bad); }
+  .pill b { color: var(--text); font-weight: 600; }
+  .pill.brand { margin-left: auto; background: transparent; border-color: transparent; }
+  .pill.brand b { color: var(--accent2); }
+  .foot { margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--line); text-align: center; color: var(--muted); font-size: 12px; }
+  .foot b { color: var(--accent2); }
+
+  .offline {
+    display: none; align-items: center; justify-content: space-between; gap: 12px;
+    background: rgba(248,113,113,.1); border: 1px solid rgba(248,113,113,.35);
+    color: #ffd6d6; border-radius: 12px; padding: 12px 16px; margin-bottom: 18px; font-size: 14px;
+  }
+  .offline.show { display: flex; }
+  .offline button { flex: 0 0 auto; }
+
+  .view { display: none; animation: fade .18s ease; }
+  .view.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+
+  .card {
+    background: linear-gradient(180deg, rgba(22,33,58,.75), rgba(17,26,46,.9));
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 16px;
+  }
+  .card h3 { margin: 0 0 12px; font-size: 14px; letter-spacing: .3px; color: var(--muted); text-transform: uppercase; }
+  .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .toolbar .spacer { flex: 1; }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel2); color: var(--text);
+    padding: 9px 14px; border-radius: 10px; cursor: pointer; transition: .15s ease; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primary { background: linear-gradient(135deg, #0ea5e9, #6366f1); border: 0; color: #fff; font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.ghost { background: transparent; }
+  .btn.danger { background: rgba(248,113,113,.12); border-color: rgba(248,113,113,.4); color: #fecaca; }
+  .btn.danger:hover { background: rgba(248,113,113,.22); }
+  .btn.small { padding: 6px 10px; font-size: 13px; border-radius: 8px; }
+  .btn.wide { width: 100%; }
+
+  .grid { display: grid; gap: 12px; }
+  .cards { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .stat .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .35px; margin-bottom: 6px; }
+  .stat .v { font-size: 16px; font-weight: 600; word-break: break-word; }
+  .stat .v small { font-weight: 400; color: var(--muted); font-size: 12px; }
+
+  .screen-layout { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 16px; align-items: start; }
+  @media (max-width: 980px) { .screen-layout { grid-template-columns: 1fr; } }
+  .screen-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .screen-toolbar .hint { flex: 1; color: var(--muted); font-size: 12.5px; }
+  .screen-wrap {
+    position: relative; background: #05080f; border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; display: flex; justify-content: center; max-height: calc(100vh - 250px);
+  }
+  .screen-wrap img { display: block; width: auto; max-width: 100%; height: auto; max-height: calc(100vh - 250px); object-fit: contain; cursor: crosshair; }
+  .screen-placeholder {
+    position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted);
+    font-size: 13px; pointer-events: none; background: repeating-linear-gradient(45deg, #05080f, #05080f 12px, #070b14 12px, #070b14 24px);
+  }
+  .screen-wrap.live .screen-placeholder { display: none; }
+  .controls .keygrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .keygrid .btn { padding: 9px 6px; font-size: 13px; }
+  .text-row { display: flex; gap: 8px; margin-top: 12px; }
+  .text-row input { flex: 1; min-width: 0; }
+  .sep { height: 1px; background: var(--line); margin: 14px 0; }
+
+  .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .photo {
+    position: relative; aspect-ratio: 1; border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden; padding: 0; background: var(--panel2); cursor: pointer;
+  }
+  .photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .2s ease; }
+  .photo:hover img { transform: scale(1.04); }
+  .photo.broken::after { content: "sin vista previa"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+  .photo .cap {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; font-size: 11px;
+    background: linear-gradient(transparent, rgba(0,0,0,.75)); color: #dbe7ff; opacity: 0; transition: .15s;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .photo:hover .cap { opacity: 1; }
+  .empty { color: var(--muted); text-align: center; padding: 36px 10px; grid-column: 1 / -1; }
+
+  .list { display: flex; flex-direction: column; gap: 10px; }
+  .list-item { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .item-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+  .item-title { font-weight: 600; }
+  .item-text { color: #c6d5ef; font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+  .tag { font-size: 11px; color: var(--muted); background: var(--panel2); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+  .tag.ok { color: var(--ok); border-color: rgba(52,211,153,.35); }
+  .tag.sms { color: var(--accent2); border-color: rgba(167,139,250,.35); }
+  .item-meta { color: var(--muted); font-size: 12px; margin-top: 6px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+  .table { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .frow { display: grid; grid-template-columns: 26px minmax(0,1fr) 92px 150px auto; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .frow:last-child { border-bottom: 0; }
+  .frow:hover { background: rgba(56,189,248,.05); }
+  .frow .ic { color: var(--muted); text-align: center; }
+  .frow .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .frow .name.dir { color: var(--accent); }
+  .frow .sz, .frow .dt { color: var(--muted); font-size: 12.5px; }
+  .frow .actions { display: flex; gap: 6px; justify-content: flex-end; }
+  .crumbs { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .crumb { background: transparent; border: 0; color: var(--muted); cursor: pointer; padding: 4px 6px; border-radius: 6px; font-size: 13px; }
+  .crumb:hover { background: var(--panel2); color: var(--text); }
+  .crumb + .crumb::before { content: "/"; color: var(--line); margin-right: 4px; }
+
+  .map-wrap { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; min-height: 320px; background: var(--panel2); }
+  .map-wrap iframe { display: block; width: 100%; height: 360px; border: 0; filter: saturate(.85) contrast(1.05); }
+
+  .app-list { display: flex; flex-direction: column; gap: 6px; max-height: 62vh; overflow-y: auto; padding-right: 4px; }
+  .app-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+  .app-row:hover { border-color: rgba(56,189,248,.4); }
+
+  .power-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .remote-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 8px; }
+  .remote-grid .btn { padding: 9px 6px; font-size: 13px; }
+  .perm-tag { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; color: var(--muted); }
+  .perm-tag.ok { color: var(--ok); border-color: rgba(52,211,153,.35); }
+  .perm-tag.bad { color: var(--bad); border-color: rgba(248,113,113,.35); }
+  .photo .mini-hint { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; text-align: center; padding: 10px; }
+
+  #termOut {
+    background: #05080f; border: 1px solid var(--line); border-radius: 12px; padding: 14px;
+    min-height: 240px; max-height: 52vh; overflow: auto; white-space: pre-wrap; word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; color: #cfe0ff;
+  }
+  .term-row { display: flex; gap: 8px; margin-top: 10px; }
+  .term-row input { flex: 1; }
+
+  .modal { position: fixed; inset: 0; background: rgba(3,6,12,.88); display: none; align-items: center; justify-content: center; z-index: 50; padding: 26px; }
+  .modal.show { display: flex; }
+  .modal-body { max-width: min(900px, 92vw); max-height: 90vh; display: flex; flex-direction: column; gap: 10px; }
+  .modal-body img { max-width: 100%; max-height: calc(90vh - 70px); object-fit: contain; border-radius: 10px; border: 1px solid var(--line); background: #05080f; }
+  .modal-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .modal-title { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .modal-actions { display: flex; gap: 8px; }
+
+  .toast {
+    position: fixed; bottom: 22px; left: 50%; transform: translate(-50%, 20px);
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    padding: 11px 18px; border-radius: 12px; font-size: 14px; opacity: 0; pointer-events: none;
+    transition: .2s ease; z-index: 100; max-width: min(560px, 90vw); box-shadow: 0 12px 40px rgba(0,0,0,.5);
+  }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.ok { border-color: rgba(52,211,153,.5); }
+  .toast.error { border-color: rgba(248,113,113,.55); }
+
+  .status-note { border-left: 3px solid var(--accent); background: rgba(56,189,248,.07); padding: 10px 14px; border-radius: 8px; font-size: 13px; color: #c9daf6; }
+  .status-note.warn { border-left-color: var(--warn); background: rgba(251,191,36,.07); }
+  .status-note.bad { border-left-color: var(--bad); background: rgba(248,113,113,.07); }
+
+  .loading { color: var(--muted); padding: 22px; text-align: center; font-size: 13px; }
+  .hidden { display: none !important; }
+  .conn-list { display: flex; flex-direction: column; gap: 8px; }
+  .conn { display: flex; align-items: center; gap: 10px; justify-content: space-between; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+  .conn .meta { min-width: 0; }
+  .conn .serial { font-family: ui-monospace, monospace; font-size: 12.5px; word-break: break-all; }
+  .conn .sub { color: var(--muted); font-size: 12px; }
+  .ip-list { display: flex; flex-direction: column; gap: 6px; }
+  .ip-row { display: flex; justify-content: space-between; gap: 10px; border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 8px 14px; font-size: 14px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; word-break: break-word; }
+
+  @media (max-width: 820px) {
+    .app { flex-direction: column; }
+    aside { width: 100%; flex: none; height: auto; position: static; border-right: 0; border-bottom: 1px solid var(--line); padding: 14px; }
+    nav { flex-direction: row; overflow-x: auto; padding-bottom: 4px; }
+    .nav-btn { border-left: 0; border-bottom: 2px solid transparent; white-space: nowrap; }
+    .nav-btn.active { border-left: 0; border-bottom-color: var(--accent); }
+    main { padding: 16px; }
+    .frow { grid-template-columns: 22px minmax(0,1fr) auto; }
+    .frow .sz, .frow .dt { display: none; }
+    .kv { grid-template-columns: 1fr; gap: 2px 0; }
+    .kv dt { margin-top: 8px; }
+    .screen-wrap, .screen-wrap img { max-height: 58vh; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <div class="brand-logo">P</div>
+      <div>
+        <div class="brand-name">PhoneDeck</div>
+        <div class="brand-sub">by ZynoList · Control local por ADB</div>
+      </div>
+    </div>
+    <nav>
+      <button class="nav-btn active" data-view="screen"><span class="nav-dot"></span> Pantalla</button>
+      <button class="nav-btn" data-view="remote"><span class="nav-dot"></span> Remoto (APK)</button>
+      <button class="nav-btn" data-view="photos"><span class="nav-dot"></span> Fotos</button>
+      <button class="nav-btn" data-view="files"><span class="nav-dot"></span> Archivos</button>
+      <button class="nav-btn" data-view="notifications"><span class="nav-dot"></span> Notificaciones</button>
+      <button class="nav-btn" data-view="sms"><span class="nav-dot"></span> Mensajes SMS</button>
+      <button class="nav-btn" data-view="location"><span class="nav-dot"></span> Ubicación</button>
+      <button class="nav-btn" data-view="apps"><span class="nav-dot"></span> Aplicaciones</button>
+      <button class="nav-btn" data-view="wifi"><span class="nav-dot"></span> WiFi / ADB</button>
+      <button class="nav-btn" data-view="power"><span class="nav-dot"></span> Energía</button>
+      <button class="nav-btn" data-view="info"><span class="nav-dot"></span> Información</button>
+      <button class="nav-btn" data-view="terminal"><span class="nav-dot"></span> Terminal</button>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="top">
+      <div class="title-block">
+        <h1 id="viewTitle">Pantalla en vivo</h1>
+        <p id="deviceSub">Esperando dispositivo…</p>
+      </div>
+      <div class="device-picker">
+        <select id="deviceSelect" title="Dispositivo ADB">
+          <option value="">Buscando…</option>
+        </select>
+        <button id="refreshBtn" class="btn ghost" title="Actualizar estado">Actualizar</button>
+      </div>
+    </header>
+
+    <div class="pillbar">
+      <span class="pill" id="pillDevice"><span class="dot"></span> <b id="pillModel">—</b></span>
+      <span class="pill" id="pillTransport"><span class="dot"></span> <span id="pillTransportText">Conexión —</span></span>
+      <span class="pill" id="pillBattery"><span class="dot"></span> <span id="pillBatteryText">Batería —</span></span>
+      <span class="pill" id="pillIp"><span class="dot"></span> <span id="pillIpText">IP —</span></span>
+      <span class="pill" id="pillScreen"><span class="dot"></span> <span id="pillScreenText">Pantalla —</span></span>
+      <span class="pill brand">by <b>ZynoList</b></span>
+    </div>
+
+    <div class="offline" id="offlineBar">
+      <span id="offlineText">Sin conexión con el teléfono.</span>
+      <button class="btn small ghost" onclick="refreshStatus()">Reintentar</button>
+    </div>
+
+    <!-- Pantalla -->
+    <section class="view active" id="view-screen">
+      <div class="screen-layout">
+        <div class="card">
+          <div class="screen-toolbar">
+            <span class="hint">Toca la imagen para pulsar en el teléfono (coordenadas reales).</span>
+            <button id="streamToggle" class="btn ghost small">Pausar</button>
+            <button id="screenRefresh" class="btn ghost small">Refrescar</button>
+          </div>
+          <div class="screen-wrap" id="screenWrap">
+            <div class="screen-placeholder">Conectando con la pantalla…</div>
+            <img id="screenImg" alt="Pantalla del teléfono">
+          </div>
+        </div>
+        <div class="card controls">
+          <h3>Controles</h3>
+          <div class="keygrid">
+            <button class="btn" data-key="back">Atrás</button>
+            <button class="btn" data-key="home">Inicio</button>
+            <button class="btn" data-key="recents">Recientes</button>
+            <button class="btn" data-key="volume_up">Vol +</button>
+            <button class="btn" data-key="volume_down">Vol −</button>
+            <button class="btn" data-key="wakeup">Despertar</button>
+            <button class="btn" data-key="sleep">Bloquear</button>
+            <button class="btn" data-key="notifications">Panel notif.</button>
+            <button class="btn" data-key="media_play_pause">Play/Pausa</button>
+          </div>
+          <div class="text-row">
+            <input id="textInput" type="text" placeholder="Escribe en el teléfono…" maxlength="2000" autocomplete="off">
+            <button id="sendText" class="btn primary">Enviar</button>
+          </div>
+          <div class="sep"></div>
+          <div class="status-note small">
+            El espejo usa capturas ADB (~1–3 fps) y funciona también con pantalla bloqueada.
+            Para 60 fps usa <span class="mono">scrcpy</span>.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Remoto con APK -->
+    <section class="view" id="view-remote">
+      <div class="card">
+        <div class="toolbar" style="margin-bottom:8px">
+          <select id="remoteSelect" title="Teléfono con PhoneLink"><option value="">Buscando teléfonos…</option></select>
+          <span class="tag" id="remoteStateTag">—</span>
+          <span class="spacer"></span>
+          <button class="btn ghost small" id="remoteRefresh">Actualizar</button>
+        </div>
+        <div id="remoteSummary" class="muted small">Instala PhoneLink en el teléfono, actívala y espera a que aparezca aquí.</div>
+      </div>
+
+      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top:12px; align-items:start">
+        <div class="card">
+          <h3>Consultar datos</h3>
+          <div class="remote-grid">
+            <button class="btn" data-remote="sms">Mensajes SMS</button>
+            <button class="btn" data-remote="notifications">Notificaciones</button>
+            <button class="btn" data-remote="location">Ubicación</button>
+            <button class="btn" data-remote="photos">Fotos</button>
+            <button class="btn" data-remote="apps">Aplicaciones</button>
+            <button class="btn" data-remote="files">Archivos</button>
+            <button class="btn" data-remote="status">Estado</button>
+            <button class="btn" data-remote="permissions">Permisos</button>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Control remoto</h3>
+          <div class="remote-grid">
+            <button class="btn" data-remote="lock">Bloquear pantalla</button>
+            <button class="btn" data-remote="vibrate">Vibrar</button>
+            <button class="btn" data-remote="toast">Mostrar aviso</button>
+            <button class="btn" data-remote="ping">Probar conexión</button>
+            <button class="btn danger" data-remote="stop">Detener PhoneLink</button>
+          </div>
+          <p class="muted small" style="margin-bottom:0">Los comandos se ejecutan en el teléfono cuando PhoneLink está activa y con la notificación visible. Puedes detenerla desde aquí o desde el propio teléfono.</p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="toolbar" style="margin-bottom:8px">
+          <h3 style="margin:0">Resultado</h3>
+          <span class="muted small" id="remoteResultLabel"></span>
+          <span class="spacer"></span>
+          <button class="btn ghost small" id="remoteClear">Limpiar</button>
+        </div>
+        <div id="remoteResult" class="list"><div class="loading">Elige una acción para consultar el teléfono por la APK.</div></div>
+      </div>
+    </section>
+
+    <!-- Fotos -->
+    <section class="view" id="view-photos">
+      <div class="toolbar">
+        <span class="muted small" id="photoCount">—</span>
+        <span class="spacer"></span>
+        <button class="btn ghost small" id="photosRefresh">Actualizar</button>
+      </div>
+      <div class="photo-grid" id="photoGrid"></div>
+    </section>
+
+    <!-- Archivos -->
+    <section class="view" id="view-files">
+      <div class="toolbar">
+        <div class="crumbs" id="fileBreadcrumb"></div>
+        <span class="spacer"></span>
+        <button class="btn ghost small" id="filesUp">Subir nivel</button>
+        <button class="btn ghost small" id="filesRefresh">Actualizar</button>
+        <button class="btn primary small" id="uploadBtn">Subir archivo</button>
+        <input type="file" id="uploadInput" class="hidden" multiple>
+      </div>
+      <div class="table" id="fileList"><div class="loading">Cargando…</div></div>
+    </section>
+
+    <!-- Notificaciones -->
+    <section class="view" id="view-notifications">
+      <div class="toolbar">
+        <span class="muted small">Se refresca automáticamente cada 6 s</span>
+        <span class="spacer"></span>
+        <button class="btn ghost small" id="notifRefresh">Actualizar</button>
+      </div>
+      <div class="list" id="notifList"><div class="loading">Cargando…</div></div>
+    </section>
+
+    <!-- SMS -->
+    <section class="view" id="view-sms">
+      <div class="toolbar">
+        <select id="smsBox">
+          <option value="inbox">Recibidos</option>
+          <option value="sent">Enviados</option>
+          <option value="all">Todos</option>
+        </select>
+        <select id="smsLimit">
+          <option value="30">30</option>
+          <option value="50" selected>50</option>
+          <option value="100">100</option>
+          <option value="200">200</option>
+        </select>
+        <span class="spacer"></span>
+        <button class="btn ghost small" id="smsRefresh">Actualizar</button>
+      </div>
+      <div class="list" id="smsList"><div class="loading">Cargando…</div></div>
+    </section>
+
+    <!-- Ubicación -->
+    <section class="view" id="view-location">
+      <div class="toolbar">
+        <span class="muted small" id="locSummary">Ubicación conocida por el teléfono</span>
+        <span class="spacer"></span>
+        <button class="btn ghost small" id="locRefresh">Actualizar</button>
+      </div>
+      <div class="grid" style="grid-template-columns: minmax(0,1fr) minmax(260px, 340px); align-items:start;" id="locLayout">
+        <div class="map-wrap" id="locMap"><div class="loading">Sin datos…</div></div>
+        <div class="card" id="locCard"><div class="loading">Cargando…</div></div>
+      </div>
+    </section>
+
+    <!-- Aplicaciones -->
+    <section class="view" id="view-apps">
+      <div class="toolbar">
+        <input id="appSearch" type="search" placeholder="Buscar paquete…" style="min-width:220px">
+        <span class="muted small" id="appCount">—</span>
+        <span class="spacer"></span>
+        <button class="btn ghost small" id="appsRefresh">Actualizar</button>
+      </div>
+      <div class="app-list" id="appList"><div class="loading">Cargando…</div></div>
+    </section>
+
+    <!-- WiFi / ADB -->
+    <section class="view" id="view-wifi">
+      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items:start;">
+        <div class="card">
+          <h3>Red del teléfono</h3>
+          <div class="ip-list" id="wifiIps"><span class="muted small">—</span></div>
+          <div class="sep"></div>
+          <div class="muted small" id="wifiSsid">Wi-Fi: —</div>
+        </div>
+        <div class="card">
+          <h3>Conexiones ADB</h3>
+          <div class="conn-list" id="wifiDevices"><span class="muted small">—</span></div>
+          <div class="sep"></div>
+          <button class="btn wide" id="wifiEnableBtn">Activar ADB por WiFi (puerto 5555)</button>
+          <div class="sep"></div>
+          <div class="text-row">
+            <input id="wifiIpInput" type="text" placeholder="192.168.1.50" autocomplete="off">
+            <button class="btn primary" id="wifiConnectBtn">Conectar</button>
+          </div>
+          <p class="muted small" style="margin-bottom:0">Conecta primero por USB, activa el modo WiFi y luego pulsa «Conectar» con la IP del teléfono. Después podrás desenchufar el cable.</p>
+        </div>
+        <div class="card">
+          <h3>Volver a USB</h3>
+          <p class="muted small">Desactiva el ADB inalámbrico y deja el teléfono escuchando solo por USB.</p>
+          <button class="btn wide danger" id="wifiDisableBtn">Desactivar ADB por WiFi</button>
+          <div class="sep"></div>
+          <div class="status-note warn small">Si el teléfono se reinicia o cambia de red, la IP puede cambiar: reconéctalo por USB o vuelve a conectar con la nueva IP.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Energía -->
+    <section class="view" id="view-power">
+      <div class="card">
+        <h3>Acciones de energía</h3>
+        <div class="power-grid">
+          <button class="btn" data-power="wake">Despertar pantalla</button>
+          <button class="btn" data-power="unlock">Despertar y deslizar</button>
+          <button class="btn" data-power="lock">Bloquear pantalla</button>
+          <button class="btn" data-power="reboot">Reiniciar</button>
+          <button class="btn danger" data-power="shutdown">Apagar</button>
+        </div>
+        <div class="sep"></div>
+        <div class="status-note warn small">
+          «Apagar» y «Reiniciar» usan <span class="mono">adb reboot</span>. Encender de nuevo un teléfono apagado
+          <b>no es posible por ADB</b>: hay que pulsar el botón físico. Bloquear apaga la pantalla; si el teléfono
+          tiene PIN/patrón, no se puede saltar el bloqueo de seguridad.
+        </div>
+      </div>
+    </section>
+
+    <!-- Información -->
+    <section class="view" id="view-info">
+      <div class="grid cards" id="infoGrid"></div>
+    </section>
+
+    <!-- Terminal -->
+    <section class="view" id="view-terminal">
+      <div class="card">
+        <h3>Shell ADB</h3>
+        <pre id="termOut">$ adb shell — listo. Escribe un comando y pulsa Ejecutar.</pre>
+        <div class="term-row">
+          <input id="termInput" type="text" placeholder="getprop ro.product.model" autocomplete="off" spellcheck="false">
+          <button class="btn primary" id="termRun">Ejecutar</button>
+          <button class="btn ghost" id="termClear">Limpiar</button>
+        </div>
+        <p class="muted small" style="margin-bottom:0">El comando se ejecuta como usuario <span class="mono">shell</span> en el teléfono. Sin root no puede leer datos privados de otras apps ni modificar el sistema.</p>
+      </div>
+    </section>
+    <footer class="foot">PhoneDeck · by <b>ZynoList</b> · 2026</footer>
+  </main>
+</div>
+
+<div class="modal" id="photoModal">
+  <div class="modal-body">
+    <div class="modal-bar">
+      <span class="modal-title" id="modalTitle">Foto</span>
+      <div class="modal-actions">
+        <a class="btn small" id="modalDownload" href="#" download>Descargar</a>
+        <button class="btn small ghost" id="modalClose">Cerrar</button>
+      </div>
+    </div>
+    <img id="modalImg" alt="Foto del teléfono">
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const state = {
+  status: null,
+  view: 'screen',
+  devices: [],
+  selected: null,
+  filesPath: '/sdcard',
+  streamOn: true,
+  streamRetry: null,
+  photoPaths: [],
+  infoLoaded: false,
+  remoteDevices: [],
+  remoteId: null,
+  remotePhotos: [],
+  remoteFilesPath: '/sdcard',
+};
+
+function esc(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+async function api(path, { method = 'GET', body } = {}) {
+  const opts = { method, headers: {} };
+  if (body !== undefined) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(path, opts);
+  const type = res.headers.get('content-type') || '';
+  const data = type.includes('application/json') ? await res.json() : await res.text();
+  if (!res.ok) throw new Error((data && data.error) || res.statusText || 'Error');
+  return data;
+}
+
+let toastTimer = null;
+function toast(message, kind = 'info') {
+  const el = $('#toast');
+  el.textContent = message;
+  el.className = 'toast show ' + kind;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3800);
+}
+
+function fmtBytes(bytes) {
+  const n = Number(bytes);
+  if (!Number.isFinite(n) || n < 0) return '—';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0;
+  let v = n;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return (i === 0 || v >= 10 ? v.toFixed(0) : v.toFixed(1)) + ' ' + units[i];
+}
+
+function fmtDate(ms) {
+  if (!ms) return '—';
+  try { return new Date(Number(ms)).toLocaleString('es', { dateStyle: 'short', timeStyle: 'short' }); }
+  catch { return new Date(Number(ms)).toLocaleString(); }
+}
+
+function fmtUptime(sec) {
+  if (!Number.isFinite(sec) || sec <= 0) return '—';
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return [d ? d + ' d' : '', h ? h + ' h' : '', m + ' min'].filter(Boolean).join(' ');
+}
+
+function setPill(id, text, cls, target) {
+  const pill = $(id);
+  pill.classList.remove('ok', 'warn', 'bad');
+  if (cls) pill.classList.add(cls);
+  $(target).textContent = text;
+}
+
+async function refreshStatus() {
+  try {
+    const s = await api('/api/status');
+    state.status = s;
+    const model = [s.manufacturer, s.model].filter(Boolean).join(' ') || 'Teléfono';
+    $('#deviceSub').textContent = `${s.device || 'dispositivo'} · Android ${s.android} (SDK ${s.sdk}) · ${s.build || ''}`;
+    setPill('#pillDevice', model, 'ok', '#pillModel');
+    setPill('#pillTransport', s.wireless ? 'ADB por WiFi' : 'USB', s.wireless ? 'warn' : 'ok', '#pillTransportText');
+    const b = s.battery || {};
+    const charging = b.charging ? ' · cargando' : '';
+    setPill('#pillBattery', `${b.level != null ? b.level + '%' : '—'}${charging} · ${b.temperature != null ? b.temperature + ' °C' : '—'} °C`,
+      b.level != null && b.level <= 15 ? 'bad' : b.charging ? 'ok' : 'warn', '#pillBatteryText');
+    setPill('#pillIp', s.primaryIp || 'sin IP', s.primaryIp ? 'ok' : 'warn', '#pillIpText');
+    setPill('#pillScreen', s.screenAwake ? 'Pantalla encendida' : 'Pantalla apagada', s.screenAwake ? 'ok' : 'warn', '#pillScreenText');
+    $('#offlineBar').classList.remove('show');
+    if (!$('#wifiIpInput').value && s.primaryIp) $('#wifiIpInput').value = s.primaryIp;
+    if (state.view === 'info') renderInfo();
+    if (state.view === 'wifi') renderWifi();
+  } catch (err) {
+    state.status = null;
+    $('#offlineText').textContent = err.message || 'Sin conexión con el teléfono.';
+    if (state.view !== 'remote') $('#offlineBar').classList.add('show');
+    ['#pillDevice', '#pillTransport', '#pillBattery', '#pillIp', '#pillScreen'].forEach((id) => {
+      $(id).classList.remove('ok', 'warn', 'bad');
+      $(id).classList.add('bad');
+    });
+  }
+}
+
+async function refreshDevices() {
+  try {
+    const data = await api('/api/devices');
+    state.devices = data.devices || [];
+    const sel = $('#deviceSelect');
+    const current = state.selected || data.selected || '';
+    const options = state.devices.filter((d) => d.state === 'device');
+    sel.innerHTML = '';
+    if (!options.length) {
+      sel.innerHTML = '<option value="">Sin dispositivos</option>';
+    } else {
+      for (const d of options) {
+        const opt = document.createElement('option');
+        opt.value = d.serial;
+        opt.textContent = `${d.wireless ? 'WiFi' : 'USB'} · ${d.model || d.serial}`;
+        if (d.serial === current) opt.selected = true;
+        sel.append(opt);
+      }
+      if (!options.some((d) => d.serial === current)) {
+        state.selected = null;
+      }
+    }
+    if (state.view === 'wifi') renderWifiDevices();
+  } catch {
+    $('#deviceSelect').innerHTML = '<option value="">Sin ADB</option>';
+  }
+}
+
+async function selectDevice(serial) {
+  if (!serial) return;
+  try {
+    await api('/api/device/select', { method: 'POST', body: { serial } });
+    state.selected = serial;
+    toast('Dispositivo seleccionado', 'ok');
+    await refreshStatus();
+    await refreshDevices();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+/* ---------- Navegación ---------- */
+const viewTitles = {
+  screen: 'Pantalla en vivo',
+  remote: 'Control remoto por APK',
+  photos: 'Fotos y galería',
+  files: 'Archivos',
+  notifications: 'Notificaciones en tiempo real',
+  sms: 'Mensajes SMS',
+  location: 'Ubicación',
+  apps: 'Aplicaciones instaladas',
+  wifi: 'WiFi y ADB inalámbrico',
+  power: 'Energía',
+  info: 'Información del dispositivo',
+  terminal: 'Terminal ADB',
+};
+
+const lazyLoaders = {
+  remote: loadRemote,
+  photos: loadPhotos,
+  files: () => loadFiles(state.filesPath),
+  notifications: loadNotifications,
+  sms: loadSms,
+  location: loadLocation,
+  apps: loadApps,
+  wifi: () => { renderWifi(); refreshDevices(); },
+  info: renderInfo,
+};
+
+function switchView(name) {
+  state.view = name;
+  $$('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
+  $$('.view').forEach((v) => v.classList.toggle('active', v.id === 'view-' + name));
+  $('#viewTitle').textContent = viewTitles[name] || 'PhoneDeck';
+  if (name === 'remote') $('#offlineBar').classList.remove('show');
+  if (name === 'screen') startStream();
+  else stopStream();
+  const loader = lazyLoaders[name];
+  if (loader) {
+    try { loader(); } catch (err) { toast(err.message, 'error'); }
+  }
+}
+
+/* ---------- Pantalla ---------- */
+const BLANK_IMG = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+function startStream() {
+  if (!state.streamOn) return;
+  const img = $('#screenImg');
+  if (img.dataset.streaming === '1') return;
+  img.dataset.streaming = '1';
+  img.src = '/api/screen/stream?t=' + Date.now();
+  $('#screenWrap').classList.add('live');
+  img.onerror = () => {
+    img.dataset.streaming = '0';
+    if (state.view === 'screen' && state.streamOn) {
+      clearTimeout(state.streamRetry);
+      state.streamRetry = setTimeout(startStream, 1500);
+    }
+  };
+}
+
+function stopStream() {
+  const img = $('#screenImg');
+  img.dataset.streaming = '0';
+  img.removeAttribute('src');
+  img.src = BLANK_IMG;
+  $('#screenWrap').classList.remove('live');
+}
+
+function toggleStream() {
+  state.streamOn = !state.streamOn;
+  $('#streamToggle').textContent = state.streamOn ? 'Pausar' : 'Reanudar';
+  if (state.streamOn) startStream();
+  else stopStream();
+}
+
+async function tapScreen(event) {
+  if (!state.streamOn || !state.status) return;
+  const img = $('#screenImg');
+  const rect = img.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const size = state.status.screenSize || { width: img.naturalWidth, height: img.naturalHeight };
+  const x = Math.round(((event.clientX - rect.left) / rect.width) * size.width);
+  const y = Math.round(((event.clientY - rect.top) / rect.height) * size.height);
+  if (x < 0 || y < 0 || x > size.width || y > size.height) return;
+  try { await api('/api/input/tap', { method: 'POST', body: { x, y } }); }
+  catch (err) { toast(err.message, 'error'); }
+}
+
+async function sendKey(key, code) {
+  try {
+    await api('/api/input/key', { method: 'POST', body: { key, code } });
+    if (key === 'wakeup' || key === 'sleep') setTimeout(refreshStatus, 600);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+async function sendText() {
+  const input = $('#textInput');
+  const text = input.value;
+  if (!text) return;
+  try {
+    await api('/api/input/text', { method: 'POST', body: { text } });
+    input.value = '';
+    toast('Texto enviado', 'ok');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ---------- Remoto (APK) ---------- */
+function remoteDevice() {
+  return state.remoteDevices.find((d) => d.deviceId === state.remoteId) || null;
+}
+
+async function refreshRemoteDevices() {
+  try {
+    const data = await api('/api/remote/devices');
+    state.remoteDevices = data.devices || [];
+    const sel = $('#remoteSelect');
+    const previous = state.remoteId;
+    sel.innerHTML = '';
+    if (!state.remoteDevices.length) {
+      sel.innerHTML = '<option value="">Sin teléfonos con PhoneLink</option>';
+      state.remoteId = null;
+    } else {
+      for (const d of state.remoteDevices) {
+        const info = d.info || {};
+        const opt = document.createElement('option');
+        opt.value = d.deviceId;
+        opt.textContent = `${d.online ? 'En línea' : 'Sin conexión'} · ${info.name || info.model || d.deviceId.slice(0, 8)}`;
+        if (d.deviceId === previous) opt.selected = true;
+        sel.append(opt);
+      }
+      if (!state.remoteDevices.some((d) => d.deviceId === previous)) {
+        const online = state.remoteDevices.find((d) => d.online);
+        state.remoteId = (online || state.remoteDevices[0]).deviceId;
+        sel.value = state.remoteId;
+      }
+    }
+    renderRemote();
+  } catch {
+    $('#remoteSelect').innerHTML = '<option value="">Error al listar teléfonos</option>';
+  }
+}
+
+function loadRemote() {
+  refreshRemoteDevices();
+}
+
+async function remoteCommand(type, args = {}) {
+  if (!state.remoteId) throw new Error('Selecciona un teléfono con PhoneLink');
+  const sent = await api('/api/remote/command', {
+    method: 'POST',
+    body: { deviceId: state.remoteId, type, args },
+  });
+  const id = sent.id;
+  const started = Date.now();
+  while (Date.now() - started < 75000) {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    const data = await api(`/api/remote/result?deviceId=${encodeURIComponent(state.remoteId)}&id=${encodeURIComponent(id)}`);
+    if (data.result) {
+      if (!data.result.ok) throw new Error(data.result.error || 'El teléfono devolvió un error');
+      return data.result.data || {};
+    }
+  }
+  throw new Error('El teléfono no respondió a tiempo. Revisa que PhoneLink siga activa y con conexión.');
+}
+
+function renderRemote() {
+  const d = remoteDevice();
+  const tag = $('#remoteStateTag');
+  const summary = $('#remoteSummary');
+  tag.classList.remove('ok', 'warn', 'bad');
+  $$('[data-remote]').forEach((btn) => { btn.disabled = !d || !d.online; });
+  if (!d) {
+    tag.textContent = 'Sin teléfonos';
+    tag.classList.add('bad');
+    summary.textContent = 'Instala PhoneLink en el teléfono, actívala y espera a que aparezca aquí.';
+    return;
+  }
+  const info = d.info || {};
+  const st = d.status || {};
+  const b = st.battery || {};
+  const perms = st.permissions || {};
+  const online = d.online;
+  tag.textContent = online ? 'En línea' : 'Sin conexión';
+  tag.classList.add(online ? 'ok' : 'bad');
+  const ago = Math.max(0, Math.round((Date.now() - Number(d.lastSeen || 0)) / 1000));
+  const seen = ago < 90 ? `hace ${ago} s` : fmtDate(d.lastSeen);
+  const ips = (st.ips || []).map((i) => `${i.iface}: ${i.ip}`).join(' · ') || '—';
+  const loc = st.location
+    ? `<a target="_blank" rel="noopener" href="https://www.google.com/maps?q=${st.location.lat},${st.location.lon}">${st.location.lat.toFixed(5)}, ${st.location.lon.toFixed(5)}</a>`
+    : '—';
+  const permList = [
+    ['SMS', perms.sms], ['Ubicación', perms.location], ['Fotos', perms.photos],
+    ['Notificaciones', perms.notifications], ['Listener', perms.notificationAccess],
+    ['Archivos', perms.allFiles], ['Admin', perms.deviceAdmin], ['Batería', perms.batteryUnrestricted],
+  ].map(([label, ok]) => `<span class="perm-tag ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'falta'} · ${label}</span>`).join('');
+  summary.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <b style="color:var(--text)">${esc(info.name || info.model || 'Teléfono')}</b>
+      <span class="tag">${esc(info.manufacturer || '')} ${esc(info.model || '')}</span>
+      <span class="tag">Android ${esc(info.android || '—')}</span>
+      <span class="tag">${online ? 'actualizado ' + seen : 'último contacto ' + seen}</span>
+    </div>
+    <div class="kv" style="grid-template-columns: 110px 1fr">
+      <dt>Batería</dt><dd>${b.level != null ? b.level + '%' : '—'}${b.charging ? ' · cargando' : ''}${b.temperature != null ? ' · ' + b.temperature + ' °C' : ''}</dd>
+      <dt>IP</dt><dd class="mono">${esc(ips)}</dd>
+      <dt>Pantalla</dt><dd>${st.screenAwake ? 'encendida' : 'apagada'}</dd>
+      <dt>Ubicación</dt><dd>${loc}</dd>
+      <dt>Comandos</dt><dd>${d.commandsPending || 0} pendientes</dd>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px">${permList}</div>
+    ${online ? '' : '<div class="status-note warn small" style="margin-top:10px">PhoneLink no está conectada. Abre la app en el teléfono y pulsa «Activar monitoreo».</div>'}`;
+}
+
+function remoteResultLoading(text) {
+  $('#remoteResult').innerHTML = '<div class="loading">' + esc(text) + '</div>';
+}
+
+function remoteResultError(text) {
+  $('#remoteResult').innerHTML = '<div class="status-note bad small">' + esc(text) + '</div>';
+}
+
+function remoteResultNote(text) {
+  $('#remoteResult').innerHTML = '<div class="status-note small">' + text + '</div>';
+}
+
+function renderRemotePermissions(data) {
+  const perms = data.permissions || {};
+  const items = [
+    ['SMS', perms.sms], ['Ubicación', perms.location], ['Fotos', perms.photos],
+    ['Notificaciones', perms.notifications], ['Acceso a notificaciones', perms.notificationAccess],
+    ['Todos los archivos', perms.allFiles], ['Administrador', perms.deviceAdmin],
+    ['Batería sin restricciones', perms.batteryUnrestricted],
+  ];
+  remoteResultNote(items.map(([label, ok]) => `<span class="perm-tag ${ok ? 'ok' : 'bad'}" style="display:inline-flex;margin:3px 5px 3px 0">${ok ? 'OK' : 'falta'} · ${esc(label)}</span>`).join(''));
+}
+
+function renderRemoteStatus(data) {
+  const b = data.battery || {};
+  const perms = data.permissions || {};
+  $('#remoteResult').innerHTML = `
+    <div class="grid cards">
+      <div class="stat"><div class="k">Batería</div><div class="v">${b.level != null ? b.level + '%' : '—'} ${b.charging ? '<small>cargando</small>' : ''}</div></div>
+      <div class="stat"><div class="k">Temperatura</div><div class="v">${b.temperature != null ? b.temperature + ' °C' : '—'}</div></div>
+      <div class="stat"><div class="k">Pantalla</div><div class="v">${data.screenAwake ? 'Encendida' : 'Apagada'}</div></div>
+      <div class="stat"><div class="k">Encendido</div><div class="v">${fmtUptime(data.uptimeSec)}</div></div>
+      <div class="stat"><div class="k">IPs</div><div class="v mono">${(data.ips || []).map((i) => i.ip).join(' · ') || '—'}</div></div>
+      <div class="stat"><div class="k">SMS</div><div class="v">${perms.sms ? 'Disponible' : 'Sin permiso'}</div></div>
+    </div>`;
+}
+
+function renderRemoteSms(data) {
+  const messages = data.messages || [];
+  if (!messages.length) { remoteResultNote('No hay mensajes en la bandeja de entrada.'); return; }
+  $('#remoteResult').innerHTML = messages.map((m) => {
+    const sent = m.type === 2;
+    return `
+      <div class="list-item">
+        <div class="item-top">
+          <span class="item-title">${esc(m.address || 'Desconocido')}</span>
+          <span class="tag ${sent ? '' : 'sms'}">${sent ? 'enviado' : 'recibido'}</span>
+        </div>
+        <div class="item-text">${esc(m.body || '')}</div>
+        <div class="item-meta"><span>${esc(fmtDate(m.date))}</span></div>
+      </div>`;
+  }).join('');
+}
+
+function renderRemoteNotifications(data) {
+  const items = data.notifications || [];
+  const warning = data.access ? '' : '<div class="status-note warn small" style="margin-bottom:10px">PhoneLink no tiene acceso a notificaciones. Actívalo en Ajustes > Notificaciones > Acceso a notificaciones.</div>';
+  if (!items.length) { $('#remoteResult').innerHTML = warning + '<div class="loading">No hay notificaciones activas.</div>'; return; }
+  $('#remoteResult').innerHTML = warning + items.map((n) => `
+    <div class="list-item">
+      <div class="item-top">
+        <span class="item-title">${esc(n.title || '(sin título)')}</span>
+        <span class="tag">${esc(n.package || '')}</span>
+      </div>
+      <div class="item-text">${esc(n.text || '')}</div>
+    </div>`).join('');
+}
+
+function renderRemoteLocation(data) {
+  if (!data.location) { remoteResultNote('El teléfono no devolvió ubicación.'); return; }
+  const loc = data.location;
+  const delta = 0.008;
+  const bbox = [loc.lon - delta, loc.lat - delta, loc.lon + delta, loc.lat + delta].join(',');
+  $('#remoteResult').innerHTML = `
+    <div class="grid" style="grid-template-columns: minmax(0,1fr) minmax(260px, 340px); align-items:start">
+      <div class="map-wrap"><iframe loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${loc.lat},${loc.lon}" title="Mapa"></iframe></div>
+      <div class="card">
+        <h3>Coordenadas</h3>
+        <dl class="kv">
+          <dt>Latitud</dt><dd class="mono">${Number(loc.lat).toFixed(6)}</dd>
+          <dt>Longitud</dt><dd class="mono">${Number(loc.lon).toFixed(6)}</dd>
+          <dt>Precisión</dt><dd>±${Math.round(loc.accuracy || 0)} m</dd>
+          <dt>Proveedor</dt><dd>${esc(loc.provider || '—')}</dd>
+        </dl>
+        <div class="sep"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <a class="btn small primary" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${loc.lat},${loc.lon}">Google Maps</a>
+          <a class="btn small" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lon}#map=18/${loc.lat}/${loc.lon}">OpenStreetMap</a>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderRemotePhotos(data) {
+  const photos = data.photos || [];
+  state.remotePhotos = photos;
+  if (!photos.length) { remoteResultNote('No hay fotos en la galería del teléfono.'); return; }
+  $('#remoteResult').innerHTML = `
+    <div class="toolbar" style="margin-bottom:10px">
+      <span class="muted small">${photos.length} fotos</span>
+      <span class="spacer"></span>
+      <button class="btn ghost small" id="remoteThumbs">Cargar miniaturas</button>
+    </div>
+    <div class="photo-grid" id="remotePhotoGrid"></div>`;
+  const grid = $('#remotePhotoGrid');
+  const frag = document.createDocumentFragment();
+  for (const photo of photos) {
+    const btn = document.createElement('button');
+    btn.className = 'photo';
+    btn.dataset.rphoto = photo.id;
+    btn.title = photo.name || '';
+    const img = document.createElement('img');
+    img.alt = photo.name || '';
+    img.style.display = 'none';
+    const hint = document.createElement('span');
+    hint.className = 'mini-hint';
+    hint.textContent = photo.name || 'Foto';
+    const cap = document.createElement('span');
+    cap.className = 'cap';
+    cap.textContent = photo.name || '';
+    btn.append(img, hint, cap);
+    btn.addEventListener('click', () => openRemotePhoto(photo));
+    frag.append(btn);
+  }
+  grid.append(frag);
+  $('#remoteThumbs').addEventListener('click', loadRemoteThumbs);
+}
+
+async function loadRemoteThumbs() {
+  const photos = state.remotePhotos || [];
+  const button = $('#remoteThumbs');
+  let done = 0;
+  for (const photo of photos) {
+    const holder = document.querySelector(`[data-rphoto="${photo.id}"]`);
+    if (!holder) continue;
+    const img = holder.querySelector('img');
+    if (img && img.dataset.loaded === '1') { done++; continue; }
+    try {
+      const data = await remoteCommand('thumb', { id: photo.id });
+      if (img && data.thumb && data.thumb.thumb) {
+        img.src = 'data:image/jpeg;base64,' + data.thumb.thumb;
+        img.style.display = 'block';
+        img.dataset.loaded = '1';
+        const hint = holder.querySelector('.mini-hint');
+        if (hint) hint.remove();
+      }
+    } catch {
+      holder.classList.add('broken');
+    }
+    done++;
+    if (button && button.isConnected) button.textContent = `Miniaturas ${done}/${photos.length}`;
+  }
+  if (button && button.isConnected) button.textContent = 'Miniaturas cargadas';
+}
+
+async function openRemotePhoto(photo) {
+  $('#modalTitle').textContent = photo.name || 'Foto';
+  $('#modalImg').removeAttribute('src');
+  $('#photoModal').classList.add('show');
+  try {
+    const data = await remoteCommand('photo', { id: photo.id });
+    const file = data.photo || {};
+    const url = 'data:' + (file.mime || 'image/jpeg') + ';base64,' + file.data;
+    $('#modalImg').src = url;
+    $('#modalDownload').href = url;
+    $('#modalDownload').setAttribute('download', file.name || 'foto.jpg');
+  } catch (err) {
+    closePhoto();
+    toast(err.message, 'error');
+  }
+}
+
+function renderRemoteApps(data) {
+  const apps = data.apps || [];
+  if (!apps.length) { remoteResultNote('No hay aplicaciones de usuario.'); return; }
+  $('#remoteResult').innerHTML = apps.map((app) => `
+    <div class="app-row">
+      <span>${esc(app.label || app.package)} <span class="mono muted">${esc(app.package)}</span></span>
+      <button class="btn small" data-rlaunch="${esc(app.package)}" ${app.launchable ? '' : 'disabled'}>Abrir</button>
+    </div>`).join('');
+}
+
+function renderRemoteFiles(data) {
+  const entries = data.entries || [];
+  const upButton = data.parent ? '<button class="btn small" data-rdir="' + esc(data.parent) + '">Subir nivel</button>' : '';
+  const rows = entries.map((entry) => {
+    const action = entry.isDir
+      ? `<button class="btn small" data-rdir="${esc(entry.path)}">Abrir</button>`
+      : `<button class="btn small" data-rfile="${esc(entry.path)}">Descargar</button>`;
+    return `<div class="frow">
+      <span class="ic">${entry.isDir ? '▸' : '·'}</span>
+      <span class="name ${entry.isDir ? 'dir' : ''}" title="${esc(entry.path)}">${esc(entry.name)}</span>
+      <span class="sz">${entry.isDir ? 'carpeta' : fmtBytes(entry.size)}</span>
+      <span class="dt">${esc(fmtDate(entry.mtime))}</span>
+      <span class="actions">${action}</span>
+    </div>`;
+  }).join('');
+  $('#remoteResult').innerHTML = `
+    <div class="toolbar">
+      <span class="mono muted small">${esc(data.path || '')}</span>
+      <span class="spacer"></span>
+      ${upButton}
+    </div>
+    <div class="table">${rows || '<div class="loading">Carpeta vacía.</div>'}</div>`;
+  $$('#remoteResult [data-rdir]').forEach((btn) => btn.addEventListener('click', () => {
+    state.remoteFilesPath = btn.dataset.rdir;
+    runRemoteAction('files');
+  }));
+  $$('#remoteResult [data-rfile]').forEach((btn) => btn.addEventListener('click', () => downloadRemoteFile(btn.dataset.rfile, btn)));
+}
+
+async function downloadRemoteFile(path, button) {
+  if (button) button.disabled = true;
+  try {
+    toast('Descargando archivo…');
+    const data = await remoteCommand('file', { path });
+    const file = data.file || {};
+    const binary = atob(file.data || '');
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const blob = new Blob([bytes], { type: file.mime || 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = file.name || 'archivo';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    toast('Archivo descargado', 'ok');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function launchRemoteApp(pkg, button) {
+  if (button) button.disabled = true;
+  try {
+    await remoteCommand('launch', { package: pkg });
+    toast('Abriendo ' + pkg + ' en el teléfono', 'ok');
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function runRemoteAction(type, button) {
+  if (!state.remoteId) { toast('Selecciona un teléfono con PhoneLink', 'error'); return; }
+  let args = {};
+  if (type === 'files') args = { path: state.remoteFilesPath || '/sdcard' };
+  if (type === 'toast') {
+    const text = prompt('Texto del aviso que aparecerá en el teléfono:', 'Hola desde PhoneDeck');
+    if (text == null || !text.trim()) return;
+    args = { text: text.trim() };
+  }
+  if (type === 'stop' && !confirm('¿Detener PhoneLink en el teléfono? Dejará de enviar datos hasta que la vuelvas a activar.')) return;
+  const labels = {
+    sms: 'Mensajes SMS', notifications: 'Notificaciones', location: 'Ubicación', photos: 'Fotos',
+    apps: 'Aplicaciones', files: 'Archivos', status: 'Estado', permissions: 'Permisos',
+    lock: 'Bloquear pantalla', vibrate: 'Vibrar', toast: 'Mostrar aviso', ping: 'Probar conexión', stop: 'Detener PhoneLink',
+  };
+  const label = labels[type] || type;
+  if (button) button.disabled = true;
+  $('#remoteResultLabel').textContent = label;
+  remoteResultLoading('Ejecutando «' + label + '» en el teléfono…');
+  try {
+    const data = await remoteCommand(type, args);
+    if (type === 'sms') renderRemoteSms(data);
+    else if (type === 'notifications') renderRemoteNotifications(data);
+    else if (type === 'location') renderRemoteLocation(data);
+    else if (type === 'photos') renderRemotePhotos(data);
+    else if (type === 'apps') renderRemoteApps(data);
+    else if (type === 'files') renderRemoteFiles(data);
+    else if (type === 'status') renderRemoteStatus(data);
+    else if (type === 'permissions') renderRemotePermissions(data);
+    else if (type === 'stop') {
+      remoteResultNote('PhoneLink se detuvo en el teléfono. La notificación desaparecerá y no se enviarán más datos.');
+      toast('PhoneLink detenida en el teléfono', 'ok');
+      setTimeout(refreshRemoteDevices, 2500);
+    } else {
+      remoteResultNote('Comando «' + esc(label) + '» ejecutado correctamente.');
+      toast(label + ': ejecutado', 'ok');
+    }
+  } catch (err) {
+    remoteResultError(err.message);
+    toast(err.message, 'error');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+/* ---------- Fotos ---------- */
+async function loadPhotos() {
+  const grid = $('#photoGrid');
+  grid.innerHTML = '<div class="loading">Buscando fotos…</div>';
+  $('#photoCount').textContent = '…';
+  try {
+    const data = await api('/api/photos');
+    const photos = data.photos || [];
+    state.photoPaths = photos;
+    $('#photoCount').textContent = photos.length + ' archivos';
+    if (!photos.length) {
+      grid.innerHTML = '<p class="empty">No se encontraron fotos en DCIM, Pictures, Download, Screenshots o Movies.</p>';
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const photo of photos) {
+      const btn = document.createElement('button');
+      btn.className = 'photo';
+      btn.title = photo.path;
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.alt = photo.name;
+      img.src = '/api/thumb?path=' + encodeURIComponent(photo.path);
+      img.addEventListener('error', () => { btn.classList.add('broken'); img.remove(); });
+      const cap = document.createElement('span');
+      cap.className = 'cap';
+      cap.textContent = photo.name;
+      btn.append(img, cap);
+      btn.addEventListener('click', () => openPhoto(photo));
+      frag.append(btn);
+    }
+    grid.innerHTML = '';
+    grid.append(frag);
+  } catch (err) {
+    grid.innerHTML = '';
+    toast(err.message, 'error');
+  }
+}
+
+function openPhoto(photo) {
+  $('#modalTitle').textContent = photo.name;
+  $('#modalImg').src = '/api/file?inline=1&path=' + encodeURIComponent(photo.path);
+  $('#modalDownload').href = '/api/file?path=' + encodeURIComponent(photo.path);
+  $('#photoModal').classList.add('show');
+}
+
+function closePhoto() {
+  $('#photoModal').classList.remove('show');
+  $('#modalImg').removeAttribute('src');
+}
+
+/* ---------- Archivos ---------- */
+function breadcrumbRoot(cur) {
+  if (cur.startsWith('/sdcard')) return '/sdcard';
+  if (cur.startsWith('/storage/emulated/0')) return '/storage/emulated/0';
+  const parts = cur.split('/').filter(Boolean);
+  return parts.length ? '/' + parts[0] : '/sdcard';
+}
+
+function renderBreadcrumb(cur) {
+  const el = $('#fileBreadcrumb');
+  el.innerHTML = '';
+  const root = breadcrumbRoot(cur);
+  const rootBtn = document.createElement('button');
+  rootBtn.className = 'crumb';
+  rootBtn.textContent = root;
+  rootBtn.addEventListener('click', () => loadFiles(root));
+  el.append(rootBtn);
+  const rest = cur.slice(root.length).split('/').filter(Boolean);
+  let acc = root;
+  for (const part of rest) {
+    acc += '/' + part;
+    const target = acc;
+    const b = document.createElement('button');
+    b.className = 'crumb';
+    b.textContent = part;
+    b.addEventListener('click', () => loadFiles(target));
+    el.append(b);
+  }
+}
+
+async function loadFiles(dir) {
+  const list = $('#fileList');
+  list.innerHTML = '<div class="loading">Leyendo carpeta…</div>';
+  try {
+    const data = await api('/api/files?path=' + encodeURIComponent(dir || state.filesPath));
+    state.filesPath = data.path;
+    renderBreadcrumb(data.path);
+    if (!data.entries.length) {
+      list.innerHTML = '<div class="loading">Carpeta vacía o sin permisos de lectura.</div>';
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const entry of data.entries) {
+      const row = document.createElement('div');
+      row.className = 'frow';
+      const ic = document.createElement('span');
+      ic.className = 'ic';
+      ic.textContent = entry.isDir ? '▸' : '·';
+      const name = document.createElement('span');
+      name.className = 'name' + (entry.isDir ? ' dir' : '');
+      name.textContent = entry.name;
+      name.title = entry.path;
+      const sz = document.createElement('span');
+      sz.className = 'sz';
+      sz.textContent = entry.isDir ? 'carpeta' : fmtBytes(entry.size);
+      const dt = document.createElement('span');
+      dt.className = 'dt';
+      dt.textContent = fmtDate(entry.mtime);
+      const actions = document.createElement('span');
+      actions.className = 'actions';
+      if (entry.isDir) {
+        name.addEventListener('click', () => loadFiles(entry.path));
+        const open = document.createElement('button');
+        open.className = 'btn small';
+        open.textContent = 'Abrir';
+        open.addEventListener('click', () => loadFiles(entry.path));
+        actions.append(open);
+      } else {
+        const download = document.createElement('a');
+        download.className = 'btn small';
+        download.textContent = 'Descargar';
+        download.href = '/api/file?path=' + encodeURIComponent(entry.path);
+        download.setAttribute('download', entry.name);
+        actions.append(download);
+        if (/\.(jpe?g|png|webp|gif|heic|avif)$/i.test(entry.name)) {
+          const view = document.createElement('button');
+          view.className = 'btn small ghost';
+          view.textContent = 'Ver';
+          view.addEventListener('click', () => openPhoto({ name: entry.name, path: entry.path }));
+          actions.append(view);
+        }
+      }
+      row.append(ic, name, sz, dt, actions);
+      frag.append(row);
+    }
+    list.innerHTML = '';
+    list.append(frag);
+  } catch (err) {
+    list.innerHTML = '<div class="loading">' + esc(err.message) + '</div>';
+    toast(err.message, 'error');
+  }
+}
+
+async function uploadFiles(fileList) {
+  if (!fileList.length) return;
+  for (const file of fileList) {
+    toast('Subiendo ' + file.name + '…');
+    try {
+      const res = await fetch('/api/upload?path=' + encodeURIComponent(state.filesPath), {
+        method: 'POST',
+        headers: { 'X-Filename': encodeURIComponent(file.name) },
+        body: file,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al subir');
+    } catch (err) {
+      toast('Error con ' + file.name + ': ' + err.message, 'error');
+      return;
+    }
+  }
+  toast('Archivo(s) subido(s)', 'ok');
+  loadFiles(state.filesPath);
+}
+
+/* ---------- Notificaciones ---------- */
+let notifTimer = null;
+async function loadNotifications() {
+  clearTimeout(notifTimer);
+  const list = $('#notifList');
+  if (!list.dataset.loaded) list.innerHTML = '<div class="loading">Leyendo notificaciones…</div>';
+  try {
+    const data = await api('/api/notifications');
+    const items = data.notifications || [];
+    list.dataset.loaded = '1';
+    if (!items.length) {
+      list.innerHTML = '<div class="loading">No hay notificaciones activas.</div>';
+    } else {
+      list.innerHTML = items.map((n) => `
+        <div class="list-item">
+          <div class="item-top">
+            <span class="item-title">${esc(n.title || '(sin título)')}</span>
+            <span class="tag">${esc(n.package)}</span>
+          </div>
+          <div class="item-text">${esc(n.text || '')}</div>
+        </div>`).join('');
+    }
+  } catch (err) {
+    list.innerHTML = '<div class="loading">' + esc(err.message) + '</div>';
+  }
+  if (state.view === 'notifications') {
+    notifTimer = setTimeout(loadNotifications, 6000);
+  }
+}
+
+/* ---------- SMS ---------- */
+async function loadSms() {
+  const list = $('#smsList');
+  list.innerHTML = '<div class="loading">Leyendo SMS…</div>';
+  try {
+    const box = $('#smsBox').value;
+    const limit = $('#smsLimit').value;
+    const data = await api(`/api/sms?box=${encodeURIComponent(box)}&limit=${encodeURIComponent(limit)}`);
+    const messages = data.messages || [];
+    if (!messages.length) {
+      list.innerHTML = '<div class="loading">No hay mensajes en esta bandeja.</div>';
+      return;
+    }
+    list.innerHTML = messages.map((m) => {
+      const sent = m.type === 2;
+      return `
+        <div class="list-item">
+          <div class="item-top">
+            <span class="item-title">${esc(m.address || 'Desconocido')}</span>
+            <span class="tag ${sent ? '' : 'sms'}">${sent ? 'enviado' : 'recibido'}</span>
+          </div>
+          <div class="item-text">${esc(m.body || '')}</div>
+          <div class="item-meta"><span>${esc(fmtDate(m.date))}</span></div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    list.innerHTML = '<div class="loading">' + esc(err.message) + '</div>';
+    toast(err.message, 'error');
+  }
+}
+
+/* ---------- Ubicación ---------- */
+async function loadLocation() {
+  const card = $('#locCard');
+  const map = $('#locMap');
+  card.innerHTML = '<div class="loading">Consultando…</div>';
+  map.innerHTML = '<div class="loading">Consultando…</div>';
+  try {
+    const data = await api('/api/location');
+    if (!data.location) {
+      card.innerHTML = '<div class="status-note warn small">' + esc(data.message || 'Sin ubicación disponible.') + '</div>';
+      map.innerHTML = '<div class="loading">Sin ubicación reciente.</div>';
+      return;
+    }
+    const loc = data.location;
+    $('#locSummary').textContent = `Última ubicación conocida · ${loc.provider} · precisión ±${Math.round(loc.accuracy)} m`;
+    const delta = 0.008;
+    const bbox = [loc.lon - delta, loc.lat - delta, loc.lon + delta, loc.lat + delta].join(',');
+    map.innerHTML = `<iframe loading="lazy" src="https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${loc.lat},${loc.lon}" title="Mapa"></iframe>`;
+    card.innerHTML = `
+      <h3>Coordenadas</h3>
+      <dl class="kv">
+        <dt>Latitud</dt><dd class="mono">${loc.lat.toFixed(6)}</dd>
+        <dt>Longitud</dt><dd class="mono">${loc.lon.toFixed(6)}</dd>
+        <dt>Precisión</dt><dd>±${Math.round(loc.accuracy)} m</dd>
+        <dt>Proveedor</dt><dd>${esc(loc.provider)}</dd>
+      </dl>
+      <div class="sep"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <a class="btn small primary" target="_blank" rel="noopener" href="https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lon}#map=18/${loc.lat}/${loc.lon}">Abrir en OpenStreetMap</a>
+        <a class="btn small" target="_blank" rel="noopener" href="https://www.google.com/maps?q=${loc.lat},${loc.lon}">Abrir en Google Maps</a>
+      </div>
+      <p class="muted small" style="margin-bottom:0">Es la última posición registrada por el sistema; puede tener minutos u horas de antigüedad.</p>`;
+  } catch (err) {
+    card.innerHTML = '<div class="status-note bad small">' + esc(err.message) + '</div>';
+    map.innerHTML = '<div class="loading">Error al consultar.</div>';
+  }
+}
+
+/* ---------- Apps ---------- */
+async function loadApps() {
+  const list = $('#appList');
+  list.innerHTML = '<div class="loading">Leyendo paquetes…</div>';
+  try {
+    const data = await api('/api/apps');
+    const apps = data.apps || [];
+    $('#appCount').textContent = apps.length + ' apps de usuario';
+    if (!apps.length) {
+      list.innerHTML = '<div class="loading">No hay apps de usuario.</div>';
+      return;
+    }
+    const frag = document.createDocumentFragment();
+    for (const pkg of apps) {
+      const row = document.createElement('div');
+      row.className = 'app-row';
+      row.dataset.pkg = pkg;
+      row.innerHTML = `<span class="mono">${esc(pkg)}</span><button class="btn small" data-launch="${esc(pkg)}">Abrir</button>`;
+      frag.append(row);
+    }
+    list.innerHTML = '';
+    list.append(frag);
+    applyAppFilter();
+  } catch (err) {
+    list.innerHTML = '<div class="loading">' + esc(err.message) + '</div>';
+  }
+}
+
+function applyAppFilter() {
+  const q = $('#appSearch').value.trim().toLowerCase();
+  $$('#appList .app-row').forEach((row) => {
+    row.style.display = row.dataset.pkg.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+async function launchApp(pkg) {
+  try {
+    await api('/api/app/launch', { method: 'POST', body: { package: pkg } });
+    toast('Abriendo ' + pkg, 'ok');
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ---------- WiFi ---------- */
+function renderWifiDevices() {
+  const box = $('#wifiDevices');
+  const ready = state.devices.filter((d) => d.state === 'device');
+  if (!ready.length) {
+    box.innerHTML = '<span class="muted small">Ningún dispositivo ADB conectado.</span>';
+    return;
+  }
+  box.innerHTML = '';
+  for (const d of ready) {
+    const row = document.createElement('div');
+    row.className = 'conn';
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.innerHTML = `<div class="serial">${esc(d.serial)}</div><div class="sub">${d.wireless ? 'WiFi' : 'USB'} · ${esc(d.model || d.product || '')}</div>`;
+    const btn = document.createElement('button');
+    btn.className = 'btn small';
+    const active = state.selected ? d.serial === state.selected : d.serial === (state.status && state.status.serial);
+    btn.textContent = active ? 'En uso' : 'Usar';
+    btn.disabled = active;
+    btn.addEventListener('click', () => selectDevice(d.serial));
+    row.append(meta, btn);
+    box.append(row);
+  }
+}
+
+function renderWifi() {
+  const s = state.status;
+  const ips = $('#wifiIps');
+  if (!s || !s.ips || !s.ips.length) {
+    ips.innerHTML = '<span class="muted small">Sin direcciones IPv4.</span>';
+  } else {
+    ips.innerHTML = s.ips.map((entry) => `
+      <div class="ip-row"><span class="mono">${esc(entry.iface)}</span><span class="mono">${esc(entry.ip)}/${entry.cidr}</span></div>`).join('');
+  }
+  $('#wifiSsid').textContent = 'Wi-Fi: ' + (s ? (s.wifi.enabled ? (s.wifi.ssid || 'activado') : 'desactivado') : '—')
+    + (s && s.adbTcpPort ? ' · ADB TCP: ' + s.adbTcpPort : '');
+  renderWifiDevices();
+}
+
+async function enableWifiAdb() {
+  const btn = $('#wifiEnableBtn');
+  btn.disabled = true;
+  try {
+    const data = await api('/api/wifi/enable', { method: 'POST', body: {} });
+    toast(data.message || 'ADB por WiFi activado', 'ok');
+    await refreshStatus();
+    await refreshDevices();
+    const ip = state.status && state.status.primaryIp;
+    if (ip) {
+      $('#wifiIpInput').value = ip;
+      toast('Ahora pulsa «Conectar» para usar ' + ip + ':5555', 'ok');
+    }
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function connectWifiAdb() {
+  const ip = $('#wifiIpInput').value.trim();
+  if (!ip) { toast('Escribe la IP del teléfono', 'error'); return; }
+  const btn = $('#wifiConnectBtn');
+  btn.disabled = true;
+  try {
+    const data = await api('/api/wifi/connect', { method: 'POST', body: { ip } });
+    toast(data.message || 'Conectado', 'ok');
+    await refreshDevices();
+    await refreshStatus();
+  } catch (err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function disableWifiAdb() {
+  if (!confirm('¿Desactivar ADB por WiFi y volver a modo USB?')) return;
+  try {
+    const data = await api('/api/wifi/disable', { method: 'POST', body: {} });
+    toast(data.message || 'ADB en modo USB', 'ok');
+    state.selected = null;
+    await refreshDevices();
+    await refreshStatus();
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+/* ---------- Energía ---------- */
+async function powerAction(action) {
+  const confirms = {
+    reboot: '¿Reiniciar el teléfono ahora?',
+    shutdown: '¿Apagar el teléfono ahora? Luego tendrás que encenderlo con el botón físico.',
+  };
+  if (confirms[action] && !confirm(confirms[action])) return;
+  try {
+    const data = await api('/api/power/' + action, { method: 'POST', body: {} });
+    toast(data.message || 'Acción enviada', 'ok');
+    setTimeout(refreshStatus, 1200);
+  } catch (err) { toast(err.message, 'error'); }
+}
+
+/* ---------- Info ---------- */
+function renderInfo() {
+  const s = state.status;
+  const grid = $('#infoGrid');
+  if (!s) {
+    grid.innerHTML = '<div class="status-note bad">Sin datos. Conecta el teléfono por USB con depuración USB activada.</div>';
+    return;
+  }
+  const b = s.battery || {};
+  const batStatus = { 1: 'desconocido', 2: 'cargando', 3: 'descargando', 4: 'no carga', 5: 'llena' }[b.status] || '—';
+  const cards = [
+    ['Modelo', `${esc(s.manufacturer)} ${esc(s.model)}`],
+    ['Dispositivo', s.device],
+    ['Android', `${s.android} (SDK ${s.sdk})`],
+    ['Compilación', s.build],
+    ['Nº de serie', s.serialno],
+    ['Conexión actual', s.wireless ? 'ADB por WiFi' : 'ADB por USB'],
+    ['Batería', `${b.level ?? '—'}% · ${batStatus}`],
+    ['Temperatura', b.temperature != null ? b.temperature + ' °C' : '—'],
+    ['Almacenamiento', s.storage ? `${s.storage.used} usados de ${s.storage.size} (${s.storage.usePct}%) · ${s.storage.avail} libres` : '—'],
+    ['Pantalla', s.screenAwake ? 'Encendida' : 'Apagada'],
+    ['Resolución', `${s.screenSize.width} × ${s.screenSize.height}`],
+    ['IP principal', s.primaryIp || 'Sin IP'],
+    ['Wi-Fi', s.wifi.enabled ? (s.wifi.ssid || 'activado') : 'desactivado'],
+    ['ADB inalámbrico', s.adbTcpPort ? 'puerto ' + s.adbTcpPort : 'desactivado'],
+    ['Tiempo encendido', fmtUptime(s.uptimeSec)],
+    ['Root', s.root ? 'sí' : 'no'],
+  ];
+  if (s.ips.length > 1) {
+    cards.push(['Todas las IPs', s.ips.map((i) => `${i.iface}: ${i.ip}`).join(' · ')]);
+  }
+  grid.innerHTML = cards.map(([k, v]) => `
+    <div class="stat"><div class="k">${esc(k)}</div><div class="v">${v === '' || v == null ? '—' : v}</div></div>`).join('');
+}
+
+/* ---------- Terminal ---------- */
+async function runTerminal() {
+  const input = $('#termInput');
+  const cmd = input.value.trim();
+  if (!cmd) return;
+  const out = $('#termOut');
+  out.textContent += `\n$ ${cmd}\n`;
+  try {
+    const data = await api('/api/shell', { method: 'POST', body: { cmd } });
+    out.textContent += (data.output || '(sin salida)') + '\n';
+  } catch (err) {
+    out.textContent += '[error] ' + err.message + '\n';
+  }
+  input.value = '';
+  out.scrollTop = out.scrollHeight;
+}
+
+/* ---------- Eventos ---------- */
+$$('.nav-btn').forEach((btn) => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+$('#refreshBtn').addEventListener('click', () => { refreshStatus(); refreshDevices(); });
+
+$('#deviceSelect').addEventListener('change', (e) => selectDevice(e.target.value));
+
+$('#remoteSelect').addEventListener('change', (e) => {
+  state.remoteId = e.target.value || null;
+  renderRemote();
+});
+$('#remoteRefresh').addEventListener('click', refreshRemoteDevices);
+$('#remoteClear').addEventListener('click', () => {
+  $('#remoteResultLabel').textContent = '';
+  $('#remoteResult').innerHTML = '<div class="loading">Elige una acción para consultar el teléfono por la APK.</div>';
+});
+$$('[data-remote]').forEach((btn) => btn.addEventListener('click', () => runRemoteAction(btn.dataset.remote, btn)));
+$('#remoteResult').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-rlaunch]');
+  if (btn) launchRemoteApp(btn.dataset.rlaunch, btn);
+});
+
+$('#screenImg').addEventListener('click', tapScreen);
+$('#streamToggle').addEventListener('click', toggleStream);
+$('#screenRefresh').addEventListener('click', () => { stopStream(); state.streamOn = true; $('#streamToggle').textContent = 'Pausar'; startStream(); });
+$$('[data-key]').forEach((btn) => btn.addEventListener('click', () => {
+  const key = btn.dataset.key === 'wakeup' ? 'wakeup' : btn.dataset.key;
+  sendKey(key);
+}));
+$('#sendText').addEventListener('click', sendText);
+$('#textInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendText(); });
+
+$('#photosRefresh').addEventListener('click', loadPhotos);
+$('#modalClose').addEventListener('click', closePhoto);
+$('#photoModal').addEventListener('click', (e) => { if (e.target === $('#photoModal')) closePhoto(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closePhoto(); });
+
+$('#filesRefresh').addEventListener('click', () => loadFiles(state.filesPath));
+$('#filesUp').addEventListener('click', () => {
+  const parent = state.filesPath.replace(/\/+$/, '').split('/').slice(0, -1).join('/') || '/sdcard';
+  loadFiles(parent || '/sdcard');
+});
+$('#uploadBtn').addEventListener('click', () => $('#uploadInput').click());
+$('#uploadInput').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  uploadFiles(files);
+});
+
+$('#notifRefresh').addEventListener('click', loadNotifications);
+$('#smsRefresh').addEventListener('click', loadSms);
+$('#smsBox').addEventListener('change', loadSms);
+$('#smsLimit').addEventListener('change', loadSms);
+
+$('#locRefresh').addEventListener('click', loadLocation);
+
+$('#appsRefresh').addEventListener('click', loadApps);
+$('#appSearch').addEventListener('input', applyAppFilter);
+$('#appList').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-launch]');
+  if (btn) launchApp(btn.dataset.launch);
+});
+
+$('#wifiEnableBtn').addEventListener('click', enableWifiAdb);
+$('#wifiConnectBtn').addEventListener('click', connectWifiAdb);
+$('#wifiDisableBtn').addEventListener('click', disableWifiAdb);
+$('#wifiIpInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') connectWifiAdb(); });
+
+$$('[data-power]').forEach((btn) => btn.addEventListener('click', () => powerAction(btn.dataset.power)));
+
+$('#termRun').addEventListener('click', runTerminal);
+$('#termInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') runTerminal(); });
+$('#termClear').addEventListener('click', () => { $('#termOut').textContent = '$ adb shell'; });
+
+/* ---------- Arranque ---------- */
+refreshStatus();
+refreshDevices();
+setInterval(refreshStatus, 3000);
+setInterval(refreshDevices, 8000);
+setInterval(() => {
+  if (state.view === 'remote') refreshRemoteDevices();
+}, 8000);
+setInterval(() => {
+  if (state.view === 'location' && document.visibilityState === 'visible') {
+    /* sin auto-refresco para no gastar batería consultando GPS */
+  }
+}, 30000);
+switchView('screen');
+</script>
+</body>
+</html>

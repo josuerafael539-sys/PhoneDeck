@@ -1,0 +1,15 @@
+{
+  "name": "phonedeck-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Panel web de PhoneDeck by ZynoList para controlar un Android por ADB y PhoneLink",
+  "author": "ZynoList",
+  "license": "UNLICENSED",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

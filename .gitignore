@@ -1,0 +1,17 @@
+node_modules/
+dashboard/.phonedeck-token
+.phonedeck-token
+.env
+*.log
+
+android/build/
+android/PhoneLink.apk
+android/PhoneLink.apk.idsig
+android/debug.keystore
+*.apk
+*.apk.idsig
+*.keystore
+*.jks
+
+.DS_Store
+Thumbs.db
