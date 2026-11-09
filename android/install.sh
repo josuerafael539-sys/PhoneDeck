@@ -23,6 +23,8 @@ $ADB shell pm grant "$PKG" android.permission.ACCESS_FINE_LOCATION || true
 $ADB shell pm grant "$PKG" android.permission.ACCESS_COARSE_LOCATION || true
 $ADB shell pm grant "$PKG" android.permission.READ_MEDIA_IMAGES || true
 $ADB shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS || true
+$ADB shell pm grant "$PKG" android.permission.CAMERA || true
+$ADB shell pm grant "$PKG" android.permission.RECORD_AUDIO || true
 $ADB shell appops set "$PKG" MANAGE_EXTERNAL_STORAGE allow || true
 $ADB shell cmd notification allow_listener "$PKG/$PKG.NotificationCollector" || true
 $ADB shell dpm set-active-admin "$PKG/.DeviceAdminReceiver" || true

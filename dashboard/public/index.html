@@ -147,6 +147,13 @@
     font-size: 13px; pointer-events: none; background: repeating-linear-gradient(45deg, #05080f, #05080f 12px, #070b14 12px, #070b14 24px);
   }
   .screen-wrap.live .screen-placeholder { display: none; }
+  .camera-box {
+    position: relative; background: #05080f; border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; display: flex; justify-content: center; align-items: center; min-height: 220px;
+  }
+  .camera-box img { display: block; width: auto; max-width: 100%; max-height: 420px; object-fit: contain; }
+  .camera-note { color: var(--muted); font-size: 13px; padding: 18px; text-align: center; }
+  .media-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
   .controls .keygrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .keygrid .btn { padding: 9px 6px; font-size: 13px; }
   .text-row { display: flex; gap: 8px; margin-top: 12px; }
@@ -401,6 +408,27 @@
 
       <div class="card" style="margin-top:12px">
         <div class="toolbar" style="margin-bottom:8px">
+          <h3 style="margin:0">Cámara y micrófono</h3>
+          <span class="tag" id="remoteMediaTag">inactivo</span>
+          <span class="spacer"></span>
+          <button class="btn ghost small" id="cameraStop">Detener cámara</button>
+        </div>
+        <div class="media-row">
+          <button class="btn" data-camera="back">Cámara trasera</button>
+          <button class="btn" data-camera="front">Cámara frontal</button>
+          <button class="btn" id="micStart">Escuchar micrófono</button>
+          <button class="btn ghost" id="micStop">Detener audio</button>
+          <span class="muted small" id="micState">—</span>
+        </div>
+        <div class="camera-box" id="remoteCameraBox">
+          <div class="camera-note" id="remoteCameraNote">Activa una cámara para ver la imagen en vivo (aprox. 2–3 fps).</div>
+          <img id="remoteCameraImg" alt="Cámara del teléfono" style="display:none">
+        </div>
+        <p class="muted small" style="margin:10px 0 0">La cámara y el micrófono solo se activan al pulsar estos botones; la notificación de PhoneLink sigue visible. Usa auriculares para evitar acoplamiento.</p>
+      </div>
+
+      <div class="card" style="margin-top:12px">
+        <div class="toolbar" style="margin-bottom:8px">
           <h3 style="margin:0">Resultado</h3>
           <span class="muted small" id="remoteResultLabel"></span>
           <span class="spacer"></span>
@@ -578,6 +606,18 @@
 <script>
 const $ = (s, el = document) => el.querySelector(s);
 const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const remoteMedia = {
+  cameraTimer: null,
+  cameraObjectUrl: null,
+  cameraBusy: false,
+  cameraOn: false,
+  audioCtx: null,
+  audioTimer: null,
+  audioSeq: 0,
+  audioNext: 0,
+  micOn: false,
+};
+
 const state = {
   status: null,
   view: 'screen',
@@ -759,6 +799,7 @@ function switchView(name) {
   if (name === 'remote') $('#offlineBar').classList.remove('show');
   if (name === 'screen') startStream();
   else stopStream();
+  if (name !== 'remote') stopRemoteMedia(true);
   const loader = lazyLoaders[name];
   if (loader) {
     try { loader(); } catch (err) { toast(err.message, 'error'); }
@@ -889,12 +930,182 @@ async function remoteCommand(type, args = {}) {
   throw new Error('El teléfono no respondió a tiempo. Revisa que PhoneLink siga activa y con conexión.');
 }
 
+function pcm16ToAudioBuffer(ctx, bytes) {
+  const count = Math.floor(bytes.byteLength / 2);
+  const samples = new Int16Array(bytes.buffer, bytes.byteOffset, count);
+  const buffer = ctx.createBuffer(1, count, 16000);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < count; i += 1) data[i] = samples[i] / 32768;
+  return buffer;
+}
+
+async function startRemoteCamera(facing) {
+  if (!state.remoteId) { toast('Selecciona un teléfono con PhoneLink', 'error'); return; }
+  try {
+    await remoteCommand('camera_start', { facing });
+    if (remoteMedia.cameraTimer) clearInterval(remoteMedia.cameraTimer);
+    const note = $('#remoteCameraNote');
+    const img = $('#remoteCameraImg');
+    img.style.display = 'none';
+    img.removeAttribute('src');
+    note.style.display = 'block';
+    note.textContent = 'Conectando cámara ' + (facing === 'front' ? 'frontal' : 'trasera') + '…';
+    remoteMedia.cameraOn = true;
+    remoteMedia.cameraTimer = setInterval(refreshRemoteCamera, 600);
+    setTimeout(refreshRemoteCamera, 500);
+    setTimeout(() => {
+      if (remoteMedia.cameraOn && img.style.display === 'none') {
+        note.textContent = 'No llegó imagen. Revisa permisos de cámara o que otra app no la esté usando.';
+      }
+    }, 6000);
+    $('#remoteMediaTag').textContent = 'cámara activa';
+    $('#remoteMediaTag').classList.add('ok');
+    toast('Cámara activada', 'ok');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function refreshRemoteCamera() {
+  if (!state.remoteId || !remoteMedia.cameraOn || remoteMedia.cameraBusy) return;
+  remoteMedia.cameraBusy = true;
+  try {
+    const res = await fetch('/api/remote/camera?deviceId=' + encodeURIComponent(state.remoteId) + '&t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const next = URL.createObjectURL(blob);
+    const old = remoteMedia.cameraObjectUrl;
+    remoteMedia.cameraObjectUrl = next;
+    const img = $('#remoteCameraImg');
+    img.src = next;
+    img.style.display = 'block';
+    $('#remoteCameraNote').style.display = 'none';
+    if (old) setTimeout(() => URL.revokeObjectURL(old), 1000);
+  } catch {
+    /* reintenta en el siguiente ciclo */
+  } finally {
+    remoteMedia.cameraBusy = false;
+  }
+}
+
+async function stopRemoteCamera(silent = false) {
+  const wasOn = remoteMedia.cameraOn;
+  remoteMedia.cameraOn = false;
+  if (remoteMedia.cameraTimer) {
+    clearInterval(remoteMedia.cameraTimer);
+    remoteMedia.cameraTimer = null;
+  }
+  if (remoteMedia.cameraObjectUrl) {
+    URL.revokeObjectURL(remoteMedia.cameraObjectUrl);
+    remoteMedia.cameraObjectUrl = null;
+  }
+  const img = $('#remoteCameraImg');
+  if (img) { img.style.display = 'none'; img.removeAttribute('src'); }
+  const note = $('#remoteCameraNote');
+  if (note) { note.style.display = 'block'; note.textContent = 'Cámara detenida.'; }
+  if (!silent) {
+    $('#remoteMediaTag').textContent = remoteMedia.micOn ? 'micrófono activo' : 'inactivo';
+    $('#remoteMediaTag').classList.toggle('ok', remoteMedia.micOn);
+  }
+  if (!wasOn) return;
+  try { await remoteCommand('camera_stop'); } catch (err) { if (!silent) toast(err.message, 'error'); }
+}
+
+async function startRemoteAudio() {
+  if (!state.remoteId) { toast('Selecciona un teléfono con PhoneLink', 'error'); return; }
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) { toast('Este navegador no soporta Web Audio', 'error'); return; }
+  const ctx = new Ctx();
+  try { await ctx.resume(); } catch { /* el navegador puede requerir otro gesto */ }
+  try {
+    await remoteCommand('mic_start');
+    if (remoteMedia.audioCtx) {
+      try { await remoteMedia.audioCtx.close(); } catch {}
+    }
+    remoteMedia.audioCtx = ctx;
+    remoteMedia.audioSeq = 0;
+    remoteMedia.audioNext = ctx.currentTime + 0.25;
+    remoteMedia.micOn = true;
+    if (remoteMedia.audioTimer) clearInterval(remoteMedia.audioTimer);
+    remoteMedia.audioTimer = setInterval(pollRemoteAudio, 200);
+    $('#micState').textContent = 'Escuchando…';
+    $('#remoteMediaTag').textContent = remoteMedia.cameraOn ? 'cámara · micrófono' : 'micrófono activo';
+    $('#remoteMediaTag').classList.add('ok');
+    toast('Micrófono activado', 'ok');
+  } catch (err) {
+    try { await ctx.close(); } catch {}
+    toast(err.message, 'error');
+  }
+}
+
+async function pollRemoteAudio() {
+  if (!state.remoteId || !remoteMedia.audioCtx) return;
+  try {
+    const data = await api('/api/remote/audio?deviceId=' + encodeURIComponent(state.remoteId) + '&after=' + remoteMedia.audioSeq);
+    const chunks = data.chunks || [];
+    const ctx = remoteMedia.audioCtx;
+    for (const chunk of chunks) {
+      const binary = atob(chunk.pcm || '');
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      const buffer = pcm16ToAudioBuffer(ctx, bytes);
+      if (buffer.length) {
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        const when = Math.max(ctx.currentTime + 0.08, remoteMedia.audioNext);
+        source.start(when);
+        remoteMedia.audioNext = when + buffer.duration;
+      }
+      remoteMedia.audioSeq = Math.max(remoteMedia.audioSeq, Number(chunk.seq) || 0);
+    }
+    if (remoteMedia.audioNext < ctx.currentTime - 0.4) remoteMedia.audioNext = ctx.currentTime + 0.1;
+    if (chunks.length) $('#micState').textContent = 'Escuchando…';
+    else if (!data.active) $('#micState').textContent = 'Sin audio';
+  } catch {
+    /* reintenta en el siguiente ciclo */
+  }
+}
+
+async function stopRemoteAudio(silent = false) {
+  const wasOn = remoteMedia.micOn;
+  remoteMedia.micOn = false;
+  if (remoteMedia.audioTimer) {
+    clearInterval(remoteMedia.audioTimer);
+    remoteMedia.audioTimer = null;
+  }
+  if (remoteMedia.audioCtx) {
+    try { await remoteMedia.audioCtx.close(); } catch {}
+    remoteMedia.audioCtx = null;
+  }
+  remoteMedia.audioSeq = 0;
+  const micState = $('#micState');
+  if (micState) micState.textContent = '—';
+  if (!silent) {
+    $('#remoteMediaTag').textContent = remoteMedia.cameraOn ? 'cámara activa' : 'inactivo';
+    $('#remoteMediaTag').classList.toggle('ok', remoteMedia.cameraOn);
+  }
+  if (!wasOn) return;
+  try { await remoteCommand('mic_stop'); } catch (err) { if (!silent) toast(err.message, 'error'); }
+}
+
+function stopRemoteMedia(silent = false) {
+  stopRemoteCamera(silent);
+  stopRemoteAudio(silent);
+}
+
 function renderRemote() {
   const d = remoteDevice();
+  if ((!d || !d.online) && (remoteMedia.cameraOn || remoteMedia.micOn)) stopRemoteMedia(true);
   const tag = $('#remoteStateTag');
   const summary = $('#remoteSummary');
   tag.classList.remove('ok', 'warn', 'bad');
   $$('[data-remote]').forEach((btn) => { btn.disabled = !d || !d.online; });
+  $$('[data-camera]').forEach((btn) => { btn.disabled = !d || !d.online; });
+  ['#micStart', '#micStop', '#cameraStop'].forEach((sel) => {
+    const btn = $(sel);
+    if (btn) btn.disabled = !d || !d.online;
+  });
   if (!d) {
     tag.textContent = 'Sin teléfonos';
     tag.classList.add('bad');
@@ -906,6 +1117,14 @@ function renderRemote() {
   const b = st.battery || {};
   const perms = st.permissions || {};
   const online = d.online;
+  const mediaTag = $('#remoteMediaTag');
+  if (mediaTag) {
+    const active = [];
+    if (st.cameraActive) active.push('cámara');
+    if (st.micActive) active.push('micrófono');
+    mediaTag.textContent = active.length ? active.join(' · ') : 'inactivo';
+    mediaTag.classList.toggle('ok', active.length > 0);
+  }
   tag.textContent = online ? 'En línea' : 'Sin conexión';
   tag.classList.add(online ? 'ok' : 'bad');
   const ago = Math.max(0, Math.round((Date.now() - Number(d.lastSeen || 0)) / 1000));
@@ -918,6 +1137,7 @@ function renderRemote() {
     ['SMS', perms.sms], ['Ubicación', perms.location], ['Fotos', perms.photos],
     ['Notificaciones', perms.notifications], ['Listener', perms.notificationAccess],
     ['Archivos', perms.allFiles], ['Admin', perms.deviceAdmin], ['Batería', perms.batteryUnrestricted],
+    ['Cámara', perms.camera], ['Micrófono', perms.microphone],
   ].map(([label, ok]) => `<span class="perm-tag ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'falta'} · ${label}</span>`).join('');
   summary.innerHTML = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
@@ -956,6 +1176,7 @@ function renderRemotePermissions(data) {
     ['Notificaciones', perms.notifications], ['Acceso a notificaciones', perms.notificationAccess],
     ['Todos los archivos', perms.allFiles], ['Administrador', perms.deviceAdmin],
     ['Batería sin restricciones', perms.batteryUnrestricted],
+    ['Cámara', perms.camera], ['Micrófono', perms.microphone],
   ];
   remoteResultNote(items.map(([label, ok]) => `<span class="perm-tag ${ok ? 'ok' : 'bad'}" style="display:inline-flex;margin:3px 5px 3px 0">${ok ? 'OK' : 'falta'} · ${esc(label)}</span>`).join(''));
 }
@@ -1698,6 +1919,7 @@ $('#refreshBtn').addEventListener('click', () => { refreshStatus(); refreshDevic
 $('#deviceSelect').addEventListener('change', (e) => selectDevice(e.target.value));
 
 $('#remoteSelect').addEventListener('change', (e) => {
+  stopRemoteMedia(true);
   state.remoteId = e.target.value || null;
   renderRemote();
 });
@@ -1707,9 +1929,20 @@ $('#remoteClear').addEventListener('click', () => {
   $('#remoteResult').innerHTML = '<div class="loading">Elige una acción para consultar el teléfono por la APK.</div>';
 });
 $$('[data-remote]').forEach((btn) => btn.addEventListener('click', () => runRemoteAction(btn.dataset.remote, btn)));
+$$('[data-camera]').forEach((btn) => btn.addEventListener('click', () => startRemoteCamera(btn.dataset.camera)));
+$('#cameraStop').addEventListener('click', () => stopRemoteCamera());
+$('#micStart').addEventListener('click', startRemoteAudio);
+$('#micStop').addEventListener('click', () => stopRemoteAudio());
 $('#remoteResult').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-rlaunch]');
   if (btn) launchRemoteApp(btn.dataset.rlaunch, btn);
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && state.view === 'remote') stopRemoteMedia(true);
+});
+window.addEventListener('pagehide', () => {
+  if (state.view === 'remote') stopRemoteMedia(true);
 });
 
 $('#screenImg').addEventListener('click', tapScreen);

@@ -15,11 +15,13 @@ Panel web autohospedado para controlar tu propio teléfono Android desde el nave
 - Notificaciones, SMS, ubicación, aplicaciones instaladas e información del sistema.
 - Terminal ADB (comandos como usuario `shell`, sin root).
 - Pestaña **Remoto (APK)** para hablar con PhoneLink aunque el teléfono no esté por USB.
+- Cámara frontal/trasera y micrófono del teléfono bajo demanda, desde la tarjeta **Cámara y micrófono** del panel remoto.
 
 ### PhoneLink (Android)
 - Servicio en primer plano con notificación permanente y botón **Detener**.
 - Consentimiento explícito antes de enviar datos.
 - Comandos remotos: estado, SMS, notificaciones, ubicación, fotos, archivos, apps, abrir apps, bloquear, vibrar, avisos y ping.
+- Cámara frontal/trasera (JPEG ~2–3 fps) y micrófono (PCM16 16 kHz) solo mientras el panel los activa; la notificación sigue visible.
 - Varias URLs de servidor separadas por coma, con rotación automática si una falla.
 - Reanudación automática al abrir la app si el monitoreo estaba activado.
 - Compatible con Tailscale y con túneles de Cloudflare.
@@ -149,7 +151,8 @@ Los túneles rápidos cambian de URL y expiran; para uso estable crea un túnel 
 - PhoneLink muestra una notificación permanente mientras está activo y permite detenerlo.
 - El consentimiento se guarda en el teléfono; no se activa nada sin marcarlo.
 - No expongas el puerto de ADB a Internet. Para remoto usa Tailscale o un túnel HTTPS.
-- Revisa los permisos de la app: SMS, ubicación, fotos, notificaciones, acceso a archivos, administrador del dispositivo y exclusión de optimización de batería.
+- Revisa los permisos de la app: SMS, ubicación, fotos, notificaciones, cámara, micrófono, acceso a archivos, administrador del dispositivo y exclusión de optimización de batería.
+- La cámara y el micrófono no se activan solos: hay que pulsar un botón en el panel y la notificación de PhoneLink debe seguir visible. Usa auriculares para evitar acoplamiento.
 - `pm clear` revoca los permisos concedidos por ADB; vuelve a ejecutar `install.sh`.
 
 ## Estructura
@@ -186,7 +189,18 @@ curl -H "x-phonedeck-token: $TOKEN" \
   http://127.0.0.1:8787/api/remote/command
 ```
 
-Comandos disponibles: `status`, `sms`, `notifications`, `location`, `photos`, `thumb`, `photo`, `files`, `file`, `apps`, `launch`, `lock`, `vibrate`, `toast`, `permissions`, `ping`, `stop`.
+Comandos disponibles: `status`, `sms`, `notifications`, `location`, `photos`, `thumb`, `photo`, `files`, `file`, `apps`, `launch`, `lock`, `vibrate`, `toast`, `permissions`, `ping`, `camera_start`, `camera_stop`, `mic_start`, `mic_stop`, `stop`.
+
+La cámara y el audio usan endpoints binarios entre la APK y el servidor:
+
+```text
+POST /api/agent/camera?deviceId=...   image/jpeg  (la APK sube el último frame)
+POST /api/agent/audio?deviceId=...    application/octet-stream (PCM16 16 kHz)
+GET  /api/remote/camera?deviceId=...  image/jpeg
+GET  /api/remote/audio?deviceId=...&after=SECUENCIA
+```
+
+El panel limita los frames a ~2–3 fps y reproduce el audio con Web Audio; al salir de la pestaña Remoto envía `camera_stop` y `mic_stop`.
 
 ## Solución de problemas
 
@@ -195,6 +209,8 @@ Comandos disponibles: `status`, `sms`, `notifications`, `location`, `photos`, `t
 - **El teléfono no conecta en remoto**: revisa que PhoneLink esté activo, que la URL sea correcta y que Tailscale o el túnel estén arriba.
 - **La URL de Cloudflare dejó de funcionar**: los túneles rápidos expiran; genera uno nuevo y actualízalo en PhoneLink.
 - **El servicio se detuvo tras una actualización**: abre PhoneLink; la app reanuda el monitoreo si estaba activado.
+- **No se ve la cámara**: comprueba que `CAMERA` esté concedido, que PhoneLink esté activa y que otra app no esté usando la cámara. En Android 15 la cámara/micrófono en primer plano puede fallar si el sistema no permite el tipo de servicio; revisa la notificación y el estado `cameraError` en el panel.
+- **No se oye el micrófono**: concede `RECORD_AUDIO`, sube el volumen multimedia y usa auriculares para evitar realimentación.
 
 ## Créditos
 

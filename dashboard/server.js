@@ -462,6 +462,24 @@ function readJson(req, limit = 1024 * 1024) {
   });
 }
 
+function readRaw(req, limit = 2 * 1024 * 1024) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > limit) {
+        reject(httpError(413, 'Cuerpo demasiado grande'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
+
 function sendJson(res, status, obj) {
   const body = Buffer.from(JSON.stringify(obj));
   res.writeHead(status, {
@@ -832,6 +850,8 @@ function touchAgent(deviceId, info) {
       nextCommand: 1,
       results: new Map(),
       waiters: new Set(),
+      camera: null,
+      audio: { chunks: [], nextSeq: 1, lastAt: 0 },
     };
     agents.set(deviceId, agent);
   }
@@ -1188,6 +1208,30 @@ async function handleApi(req, res, url) {
     return sendJson(res, 200, { ok: true });
   }
 
+  if (p === '/api/agent/camera' && method === 'POST') {
+    const deviceId = String(url.searchParams.get('deviceId') || '').trim();
+    if (!deviceId) throw httpError(400, 'deviceId requerido');
+    const agent = touchAgent(deviceId);
+    const jpeg = await readRaw(req, 5 * 1024 * 1024);
+    if (!jpeg.length) throw httpError(400, 'Frame vacío');
+    agent.camera = { at: Date.now(), jpeg };
+    return sendJson(res, 200, { ok: true, at: agent.camera.at });
+  }
+
+  if (p === '/api/agent/audio' && method === 'POST') {
+    const deviceId = String(url.searchParams.get('deviceId') || '').trim();
+    if (!deviceId) throw httpError(400, 'deviceId requerido');
+    const agent = touchAgent(deviceId);
+    if (!agent.audio) agent.audio = { chunks: [], nextSeq: 1, lastAt: 0 };
+    const pcm = await readRaw(req, 512 * 1024);
+    if (!pcm.length) throw httpError(400, 'Audio vacío');
+    const seq = agent.audio.nextSeq++;
+    agent.audio.chunks.push({ seq, at: Date.now(), pcm });
+    while (agent.audio.chunks.length > 100) agent.audio.chunks.shift();
+    agent.audio.lastAt = Date.now();
+    return sendJson(res, 200, { ok: true, seq });
+  }
+
   /* ---------- API del panel remoto ---------- */
 
   if (p === '/api/remote/devices' && method === 'GET') {
@@ -1216,6 +1260,8 @@ async function handleApi(req, res, url) {
       throw httpError(409, 'La app de ese teléfono no está conectada. Abre PhoneLink y pulsa «Activar».');
     }
     if (!/^[a-z_]+$/.test(type)) throw httpError(400, 'Comando inválido');
+    if (type === 'camera_start') agent.camera = null;
+    if (type === 'mic_start') agent.audio = { chunks: [], nextSeq: 1, lastAt: 0 };
     const command = {
       id: String(agent.nextCommand++),
       type,
@@ -1233,6 +1279,46 @@ async function handleApi(req, res, url) {
     const agent = getAgent(deviceId);
     if (!agent) throw httpError(404, 'Teléfono no registrado');
     return sendJson(res, 200, { ok: true, result: agent.results.get(id) || null });
+  }
+
+  if (p === '/api/remote/camera' && method === 'GET') {
+    const deviceId = String(url.searchParams.get('deviceId') || '');
+    const agent = getAgent(deviceId);
+    if (!agent || !agent.camera || !agent.camera.jpeg) {
+      throw httpError(404, 'No hay imagen de cámara. Activa la cámara desde el panel.');
+    }
+    const jpeg = agent.camera.jpeg;
+    res.writeHead(200, {
+      'Content-Type': 'image/jpeg',
+      'Cache-Control': 'no-store',
+      'Content-Length': jpeg.length,
+    });
+    return res.end(jpeg);
+  }
+
+  if (p === '/api/remote/audio' && method === 'GET') {
+    const deviceId = String(url.searchParams.get('deviceId') || '');
+    const after = Number(url.searchParams.get('after') || 0);
+    const agent = getAgent(deviceId);
+    if (!agent) throw httpError(404, 'Teléfono no registrado');
+    if (!agent.audio) agent.audio = { chunks: [], nextSeq: 1, lastAt: 0 };
+    const now = Date.now();
+    const active = Boolean(agent.audio.lastAt && now - agent.audio.lastAt < 3000);
+    let chunks = agent.audio.chunks.filter((chunk) => chunk.seq > after);
+    if (!(after > 0)) {
+      const cutoff = now - 1000;
+      chunks = agent.audio.chunks.filter((chunk) => chunk.at >= cutoff);
+    }
+    chunks = chunks.slice(-20);
+    return sendJson(res, 200, {
+      ok: true,
+      active,
+      chunks: chunks.map((chunk) => ({
+        seq: chunk.seq,
+        at: chunk.at,
+        pcm: chunk.pcm.toString('base64'),
+      })),
+    });
   }
 
   if (p === '/api/remote/forget' && method === 'POST') {

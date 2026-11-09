@@ -14,6 +14,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -58,7 +59,10 @@ import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class AgentService extends Service {
     public static final String ACTION_START = "com.zynolist.phonelink.action.START";
@@ -71,6 +75,13 @@ public class AgentService extends Service {
     private Thread worker;
     private long lastHeartbeatAt = 0;
     private String notificationText = "Iniciando…";
+    private volatile CameraStreamer cameraStreamer;
+    private volatile MicStreamer micStreamer;
+    private volatile String cameraFacing = "";
+    private volatile String cameraError = "";
+    private volatile ApiClient currentApi;
+    private final AtomicBoolean frameUploading = new AtomicBoolean(false);
+    private final ExecutorService frameUploads = Executors.newSingleThreadExecutor();
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -99,7 +110,7 @@ public class AgentService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
-        startForeground(NOTIFICATION_ID, buildNotification(notificationText));
+        startForegroundCompat();
         if (!shouldRun) {
             shouldRun = true;
             running = true;
@@ -114,6 +125,8 @@ public class AgentService extends Service {
         shouldRun = false;
         running = false;
         if (worker != null) worker.interrupt();
+        stopMedia();
+        frameUploads.shutdownNow();
         super.onDestroy();
     }
 
@@ -122,6 +135,7 @@ public class AgentService extends Service {
         running = false;
         Prefs.setEnabled(this, false);
         if (worker != null) worker.interrupt();
+        stopMedia();
         stopForeground(STOP_FOREGROUND_REMOVE);
         stopSelf();
     }
@@ -147,6 +161,7 @@ public class AgentService extends Service {
         while (shouldRun) {
             List<ApiClient> clients = clientsFromPrefs();
             if (clients.isEmpty()) {
+                currentApi = null;
                 setNotificationText("Configuración inválida");
                 if (!sleepQuietly(15000)) break;
                 continue;
@@ -156,6 +171,7 @@ public class AgentService extends Service {
                 registered = false;
             }
             ApiClient api = clients.get(active);
+            currentApi = api;
             try {
                 if (!registered) {
                     api.post("/api/agent/register", registerBody(), 20000);
@@ -172,7 +188,7 @@ public class AgentService extends Service {
                 }
                 failures = 0;
                 Prefs.get(this).edit().putLong("last_contact", System.currentTimeMillis()).apply();
-                setNotificationText("Conectado · " + hostLabel(api));
+                setNotificationText(connectedText(api));
                 handleCommands(api, response.optJSONArray("commands"));
             } catch (Exception e) {
                 failures++;
@@ -238,6 +254,10 @@ public class AgentService extends Service {
         put(status, "location", lastLocationJson());
         put(status, "permissions", permissionsJson());
         put(status, "notificationAccess", NotificationCollector.isEnabled(this));
+        put(status, "cameraActive", cameraStreamer != null && cameraStreamer.isRunning());
+        put(status, "cameraFacing", cameraFacing);
+        put(status, "micActive", micStreamer != null && micStreamer.isRunning());
+        put(status, "cameraError", cameraError.isEmpty() ? null : cameraError);
         return status;
     }
 
@@ -383,6 +403,10 @@ public class AgentService extends Service {
         JSONObject permissions = new JSONObject();
         put(permissions, "sms",
                 checkSelfPermission(Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED);
+        put(permissions, "camera",
+                checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED);
+        put(permissions, "microphone",
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED);
         put(permissions, "location", hasLocationPermission());
         String mediaPermission = Build.VERSION.SDK_INT >= 33
                 ? Manifest.permission.READ_MEDIA_IMAGES : Manifest.permission.READ_EXTERNAL_STORAGE;
@@ -503,6 +527,27 @@ public class AgentService extends Service {
                     put(result, "pong", true);
                     break;
                 }
+                case "camera_start": {
+                    startCamera(args.optString("facing", "back"));
+                    put(result, "starting", true);
+                    put(result, "facing", cameraFacing);
+                    break;
+                }
+                case "camera_stop": {
+                    stopCamera();
+                    put(result, "stopped", true);
+                    break;
+                }
+                case "mic_start": {
+                    startMic();
+                    put(result, "listening", true);
+                    break;
+                }
+                case "mic_stop": {
+                    stopMic();
+                    put(result, "stopped", true);
+                    break;
+                }
                 default:
                     throw new Exception("Comando desconocido: " + type);
             }
@@ -512,6 +557,114 @@ public class AgentService extends Service {
             Log.w("PhoneLink", "comando " + type + " falló: " + message);
             sendResult(api, id, null, message);
         }
+    }
+
+    private synchronized void startCamera(String requestedFacing) throws Exception {
+        if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            throw new Exception("Permiso de cámara no concedido. Concédelo en la app o con install.sh.");
+        }
+        if (cameraStreamer == null) {
+            cameraStreamer = new CameraStreamer(this, new CameraStreamer.Sink() {
+                @Override
+                public void onJpeg(byte[] jpeg, String facing) {
+                    uploadCameraFrame(jpeg);
+                }
+
+                @Override
+                public void onError(String message) {
+                    cameraError = message;
+                    updateMediaNotification();
+                }
+            });
+        }
+        cameraError = "";
+        cameraFacing = "front".equals(requestedFacing) ? "front" : "back";
+        try {
+            cameraStreamer.start(cameraFacing);
+        } catch (Exception e) {
+            cameraFacing = "";
+            throw e;
+        }
+        updateMediaNotification();
+    }
+
+    private synchronized void stopCamera() {
+        if (cameraStreamer != null) cameraStreamer.stop();
+        cameraFacing = "";
+        cameraError = "";
+        updateMediaNotification();
+    }
+
+    private synchronized void startMic() throws Exception {
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            throw new Exception("Permiso de micrófono no concedido. Concédelo en la app o con install.sh.");
+        }
+        if (micStreamer == null) {
+            micStreamer = new MicStreamer(this::uploadAudio);
+        }
+        micStreamer.start();
+        updateMediaNotification();
+    }
+
+    private synchronized void stopMic() {
+        if (micStreamer != null) micStreamer.stop();
+        updateMediaNotification();
+    }
+
+    private void stopMedia() {
+        if (cameraStreamer != null) cameraStreamer.stop();
+        if (micStreamer != null) micStreamer.stop();
+        cameraFacing = "";
+        cameraError = "";
+    }
+
+    private void uploadCameraFrame(byte[] jpeg) {
+        ApiClient api = currentApi;
+        if (api == null || jpeg == null || jpeg.length == 0) return;
+        if (!frameUploading.compareAndSet(false, true)) return;
+        try {
+            frameUploads.execute(() -> {
+                try {
+                    api.postBytes("/api/agent/camera?deviceId=" + Uri.encode(Prefs.deviceId(this)),
+                            jpeg, "image/jpeg", 15000);
+                } catch (Exception e) {
+                    Log.w("PhoneLink", "frame: " + e.getMessage());
+                } finally {
+                    frameUploading.set(false);
+                }
+            });
+        } catch (Exception e) {
+            frameUploading.set(false);
+        }
+    }
+
+    private void uploadAudio(byte[] pcm) {
+        ApiClient api = currentApi;
+        if (api == null || pcm == null || pcm.length == 0) return;
+        try {
+            api.postBytes("/api/agent/audio?deviceId=" + Uri.encode(Prefs.deviceId(this)),
+                    pcm, "application/octet-stream", 15000);
+        } catch (Exception e) {
+            Log.w("PhoneLink", "audio: " + e.getMessage());
+        }
+    }
+
+    private String connectedText(ApiClient api) {
+        return "Conectado · " + hostLabel(api) + mediaSuffix();
+    }
+
+    private String mediaSuffix() {
+        boolean camera = cameraStreamer != null && cameraStreamer.isRunning();
+        boolean mic = micStreamer != null && micStreamer.isRunning();
+        if (camera && mic) return " · cámara + micrófono";
+        if (camera) return " · cámara";
+        if (mic) return " · micrófono";
+        return "";
+    }
+
+    private void updateMediaNotification() {
+        ApiClient api = currentApi;
+        if (api != null) setNotificationText(connectedText(api));
     }
 
     private void sendResult(ApiClient api, String commandId, JSONObject data, String error) {
@@ -813,6 +966,20 @@ public class AgentService extends Service {
                         Icon.createWithResource(this, R.drawable.ic_notification),
                         "Detener", stop).build())
                 .build();
+    }
+
+    private void startForegroundCompat() {
+        Notification notification = buildNotification(notificationText);
+        if (Build.VERSION.SDK_INT >= 29) {
+            int types = ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+                    | ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+            if (Build.VERSION.SDK_INT >= 34) {
+                types |= ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE;
+            }
+            startForeground(NOTIFICATION_ID, notification, types);
+        } else {
+            startForeground(NOTIFICATION_ID, notification);
+        }
     }
 
     private void setNotificationText(String text) {

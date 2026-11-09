@@ -118,7 +118,7 @@ public class MainActivity extends Activity {
         LinearLayout consentCard = card();
         consentCard.addView(sectionTitle("Qué se comparte"));
         consentCard.addView(text(
-                "Mientras esté activo y con tu permiso, la app puede enviar a tu PC: batería, IP, pantalla encendida, ubicación, notificaciones, SMS, fotos, archivos, lista de apps y estado de permisos. También acepta comandos como bloquear la pantalla, vibrar o mostrar un aviso.",
+                "Mientras esté activo y con tu permiso, la app puede enviar a tu PC: batería, IP, pantalla encendida, ubicación, notificaciones, SMS, fotos, archivos, lista de apps y estado de permisos. También acepta comandos como bloquear la pantalla, vibrar o mostrar un aviso. La cámara y el micrófono solo se activan cuando los pulsas desde el panel y mientras la notificación siga visible.",
                 13, COLOR_MUTED, false));
         consentBox = new CheckBox(this);
         consentBox.setText("Entiendo y acepto que este teléfono envíe esos datos a mi PC mientras esté activo.");
@@ -133,7 +133,7 @@ public class MainActivity extends Activity {
         permissionsView = text("", 13, COLOR_MUTED, false);
         permissionsView.setPadding(0, 0, 0, dp(8));
         permissionCard.addView(permissionsView);
-        Button dataPermissions = button("Permisos de datos (ubicación, SMS, fotos, notificaciones)", false);
+        Button dataPermissions = button("Permisos de datos (ubicación, SMS, fotos, notificaciones, cámara, micrófono)", false);
         dataPermissions.setOnClickListener(v -> requestDataPermissions());
         permissionCard.addView(dataPermissions);
         Button notificationAccess = button("Acceso a notificaciones", false);
@@ -165,7 +165,7 @@ public class MainActivity extends Activity {
         root.addView(controlCard);
 
         TextView footer = text(
-                "PhoneLink no se oculta, no captura la pantalla y no puede leer datos privados de otras apps. Puedes pulsar «Detener» o desinstalarla cuando quieras.",
+                "PhoneLink no se oculta; la cámara y el micrófono solo funcionan bajo demanda, con la notificación visible y el botón «Detener» disponible. No puede leer datos privados de otras apps sin permiso. Puedes desinstalarla cuando quieras.",
                 12, COLOR_MUTED, false);
         footer.setPadding(0, dp(12), 0, 0);
         root.addView(footer);
@@ -304,6 +304,10 @@ public class MainActivity extends Activity {
                 == PackageManager.PERMISSION_GRANTED));
         builder.append(statusLine("SMS", checkSelfPermission(Manifest.permission.READ_SMS)
                 == PackageManager.PERMISSION_GRANTED));
+        builder.append(statusLine("Cámara", checkSelfPermission(Manifest.permission.CAMERA)
+                == PackageManager.PERMISSION_GRANTED));
+        builder.append(statusLine("Micrófono", checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED));
         String mediaPermission = Build.VERSION.SDK_INT >= 33
                 ? Manifest.permission.READ_MEDIA_IMAGES : Manifest.permission.READ_EXTERNAL_STORAGE;
         builder.append(statusLine("Fotos", checkSelfPermission(mediaPermission)
@@ -338,6 +342,8 @@ public class MainActivity extends Activity {
         permissions.add(Manifest.permission.ACCESS_FINE_LOCATION);
         permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
         permissions.add(Manifest.permission.READ_SMS);
+        permissions.add(Manifest.permission.CAMERA);
+        permissions.add(Manifest.permission.RECORD_AUDIO);
         if (Build.VERSION.SDK_INT >= 33) {
             permissions.add(Manifest.permission.READ_MEDIA_IMAGES);
             permissions.add(Manifest.permission.POST_NOTIFICATIONS);
